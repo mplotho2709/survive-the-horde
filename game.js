@@ -1251,7 +1251,7 @@ const Game = {
       }
     } else if (this.state === STATES.GAME_OVER) {
       if (mx >= W / 2 - 120 && mx <= W / 2 + 120 && my >= 370 && my <= 422) {
-        this.start();
+        this.state = STATES.MENU;
       }
     } else if (this.state === STATES.LEVEL_UP) {
       this.levelUpChoices.forEach((upg, i) => {

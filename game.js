@@ -62,7 +62,7 @@ function dist(a, b) {
 }
 
 function randEdgePos(cx = W / 2, cy = H / 2) {
-  const margin = 40;
+  const margin = 180; // far enough off-screen that enemies aren't visible on spawn
   const side = Math.floor(Math.random() * 4);
   switch (side) {
     case 0: return { x: cx - W / 2 + Math.random() * W, y: cy - H / 2 - margin };
@@ -612,8 +612,9 @@ class WaveManager {
     this.roundDuration = secs * 60;
     this.roundTimer    = this.roundDuration;
 
-    // Spawn interval: 120 frames wave 1, –5 per wave, min 35 (reached ~wave 18)
-    this.spawnInterval = Math.max(35, 120 - (this.wave - 1) * 5);
+    // Spawn interval: scales with wave and screen size (larger screen = faster spawns)
+    const screenScale  = Math.sqrt((W * H) / (900 * 600));
+    this.spawnInterval = Math.max(25, Math.round((120 - (this.wave - 1) * 5) / screenScale));
 
     // Schedule elites evenly through every 3rd round
     this.eliteQueue = [];
@@ -678,7 +679,10 @@ class WaveManager {
     this.spawnTimer++;
     if (this.spawnTimer >= this.spawnInterval) {
       this.spawnTimer = 0;
-      const batch = Math.min(4, 1 + Math.floor((this.wave - 1) / 4));
+      // Scale batch size with screen area so density feels consistent at any resolution
+      const densityFactor = Math.sqrt((W * H) / (900 * 600));
+      const baseBatch = 1 + Math.floor((this.wave - 1) / 4);
+      const batch = Math.min(10, Math.round(baseBatch * densityFactor));
       for (let i = 0; i < batch; i++) {
         const pos = randEdgePos(player.x, player.y);
         enemies.push(new Enemy(pos.x, pos.y, this._randomType(), this.wave));

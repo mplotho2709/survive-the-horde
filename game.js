@@ -78,7 +78,8 @@ class Player {
   }
 
   get fireCooldownMax() {
-    return Math.max(4, this.baseFireCD - this.fireCooldownBonus);
+    const maxBonus = Math.floor(this.baseFireCD * 0.4);
+    return Math.max(4, this.baseFireCD - Math.min(this.fireCooldownBonus, maxBonus));
   }
 
   addXP(amount) {
@@ -320,73 +321,56 @@ class Bullet {
 // ── WaveManager ────────────────────────────────────────────────────────────
 class WaveManager {
   constructor() {
-    this.wave       = 0;
-    this.spawnTimer = 0;
-    this.spawnInterval = 90; // frames between spawn bursts
-    this.enemiesInWave = 0;
-    this.enemiesSpawned = 0;
-    this.waveCleared = false;
+    this.wave             = 0;
+    this.spawnTimer       = 0;
+    this.waveCleared      = false;
     this.betweenWaveTimer = 0;
-    this.endless = false;
+    this.roundTimer       = 0;
+    this.roundDuration    = 0;
+    this.eliteQueue       = []; // frame counts (roundTimer values) at which to spawn an elite
     this.startNextWave();
   }
 
+  get betweenWaves()  { return this.waveCleared; }
+  get roundSecsLeft() { return Math.ceil(this.roundTimer / 60); }
+
   startNextWave() {
     this.wave++;
-    this.enemiesSpawned = 0;
-    this.waveCleared = false;
-    this.spawnTimer = 0;
-    // Spawn interval shrinks each wave: 90 → floor of 28 at wave 10+
-    this.spawnInterval = Math.max(28, 90 - (this.wave - 1) * 7);
+    this.waveCleared      = false;
+    this.spawnTimer       = 0;
+    this.betweenWaveTimer = 0;
 
-    if (this.wave === 1) {
-      this.waveConfig = [
-        { type: 'slow', count: 8 },
-      ];
-    } else if (this.wave === 2) {
-      this.waveConfig = [
-        { type: 'medium', count: 14 },
-        { type: 'fast',   count: 3 },
-      ];
-    } else if (this.wave === 3) {
-      this.waveConfig = [
-        { type: 'slow',   count: 10 },
-        { type: 'medium', count: 10 },
-        { type: 'fast',   count: 5 },
-        { type: 'heavy',  count: 3 },
-      ];
-    } else {
-      // Endless — steep scaling
-      this.endless = true;
-      const scale = this.wave - 3;
-      this.waveConfig = [
-        { type: 'medium', count: 12 + scale * 8 },
-        { type: 'fast',   count: 4  + scale * 4 },
-        { type: 'heavy',  count: 2  + scale * 2 },
-      ];
-    }
+    // Round duration: 30s for round 1, +10s per round, max 120s
+    const secs         = Math.min(120, 30 + (this.wave - 1) * 10);
+    this.roundDuration = secs * 60;
+    this.roundTimer    = this.roundDuration;
 
-    // Spawn elites every 3rd wave (1 on wave 3, 2 on wave 6, etc.)
+    // Spawn interval: 90 frames → 20 frames minimum
+    this.spawnInterval = Math.max(20, 90 - (this.wave - 1) * 8);
+
+    // Schedule elites evenly through every 3rd round
+    this.eliteQueue = [];
     if (this.wave % 3 === 0) {
-      this.waveConfig.push({ type: 'elite', count: Math.floor(this.wave / 3) });
+      const count = Math.floor(this.wave / 3);
+      for (let i = 0; i < count; i++) {
+        // Spread from 20% to 80% through the round
+        const frac = count === 1 ? 0.5 : 0.2 + 0.6 * (i / (count - 1));
+        this.eliteQueue.push(Math.floor(this.roundDuration * (1 - frac)));
+      }
+      // Sort descending so we pop the earliest ones first as timer counts down
+      this.eliteQueue.sort((a, b) => b - a);
     }
-
-    this.enemiesInWave = this.waveConfig.reduce((s, c) => s + c.count, 0);
-    this._buildQueue();
   }
 
-  _buildQueue() {
-    this.spawnQueue = [];
-    for (const cfg of this.waveConfig) {
-      for (let i = 0; i < cfg.count; i++) {
-        this.spawnQueue.push(cfg.type);
-      }
-    }
-    // Shuffle
-    for (let i = this.spawnQueue.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [this.spawnQueue[i], this.spawnQueue[j]] = [this.spawnQueue[j], this.spawnQueue[i]];
-    }
+  _randomType() {
+    const w    = this.wave;
+    const pool = ['medium', 'medium', 'medium'];
+    if (w <= 4) pool.push('slow', 'slow');
+    if (w >= 2) pool.push('fast', 'fast');
+    if (w >= 3) pool.push('heavy');
+    if (w >= 5) pool.push('heavy', 'fast');
+    if (w >= 7) pool.push('heavy', 'heavy');
+    return pool[Math.floor(Math.random() * pool.length)];
   }
 
   update(enemies) {
@@ -399,27 +383,30 @@ class WaveManager {
       return;
     }
 
-    // Spawn enemies in batches
+    // Count down round timer
+    this.roundTimer--;
+    if (this.roundTimer <= 0) {
+      this.waveCleared = true;
+      return;
+    }
+
+    // Spawn scheduled elites
+    while (this.eliteQueue.length > 0 &&
+           this.roundTimer <= this.eliteQueue[this.eliteQueue.length - 1]) {
+      this.eliteQueue.pop();
+      enemies.push(new Enemy(randEdgePos().x, randEdgePos().y, 'elite', this.wave));
+    }
+
+    // Continuously spawn regular enemies
     this.spawnTimer++;
-    if (this.spawnTimer >= this.spawnInterval && this.spawnQueue.length > 0) {
+    if (this.spawnTimer >= this.spawnInterval) {
       this.spawnTimer = 0;
-      const batchSize = Math.min(Math.floor(2 + this.wave * 0.5), this.spawnQueue.length);
-      for (let i = 0; i < batchSize; i++) {
-        const type = this.spawnQueue.pop();
-        const pos  = randEdgePos();
-        enemies.push(new Enemy(pos.x, pos.y, type, this.wave));
-        this.enemiesSpawned++;
+      const batch = Math.min(6, 1 + Math.floor(this.wave * 0.5));
+      for (let i = 0; i < batch; i++) {
+        const pos = randEdgePos();
+        enemies.push(new Enemy(pos.x, pos.y, this._randomType(), this.wave));
       }
     }
-
-    // Wave cleared when all spawned and none remain
-    if (this.spawnQueue.length === 0 && enemies.length === 0) {
-      this.waveCleared = true;
-    }
-  }
-
-  get betweenWaves() {
-    return this.waveCleared;
   }
 }
 
@@ -568,24 +555,24 @@ function rollRarity(luck) {
 const UPGRADES = [
   {
     id: 'fire_speed', name: 'Rapid Fire', icon: '⚡',
-    tiers: { common: 2, uncommon: 4, rare: 7 },
+    tiers: { common: 2, uncommon: 3, rare: 5 },
     descFn: (v) => `Fire cooldown –${v} frames`,
-    maxed: (p) => p.fireCooldownBonus >= 10,
-    apply(p, v) { p.fireCooldownBonus = Math.min(p.fireCooldownBonus + v, 10); },
+    maxed: (p) => p.fireCooldownBonus >= Math.floor(p.baseFireCD * 0.4),
+    apply(p, v) { p.fireCooldownBonus += v; },
   },
   {
     id: 'bullet_size', name: 'Big Shot', icon: '●',
-    tiers: { common: 2, uncommon: 4, rare: 7 },
+    tiers: { common: 1, uncommon: 2, rare: 3 },
     descFn: (v) => `Projectile radius +${v}`,
-    maxed: (p) => p.bulletSize >= 12,
-    apply(p, v) { p.bulletSize = Math.min(p.bulletSize + v, 12); },
+    maxed: (p) => p.bulletSize >= p.weapon.maxBulletSize,
+    apply(p, v) { p.bulletSize = Math.min(p.bulletSize + v, p.weapon.maxBulletSize); },
   },
   {
     id: 'damage', name: 'Heavy Rounds', icon: '💥',
-    tiers: { common: 1, uncommon: 2, rare: 4 },
+    tiers: { common: 0.5, uncommon: 1, rare: 2 },
     descFn: (v) => `Bullet damage +${v}`,
-    maxed: (p) => p.bulletDamage >= 6,
-    apply(p, v) { p.bulletDamage = Math.min(p.bulletDamage + v, 6); },
+    maxed: (p) => p.bulletDamage >= p.weapon.maxDamage,
+    apply(p, v) { p.bulletDamage = Math.min(p.bulletDamage + v, p.weapon.maxDamage); },
   },
   {
     id: 'move_speed', name: 'Afterburner', icon: '▶▶',
@@ -622,42 +609,47 @@ const WEAPONS = [
   {
     id: 'pistol', name: 'Pistol', color: '#ffe082',
     tag: 'Balanced all-rounder',
-    statA: 'CD: 18  ·  DMG: 1',
+    statA: 'CD: 18  ·  DMG: 1.2',
     statB: 'No pierce',
-    fireCD: 18, damage: 1, bulletSize: 4, pierce: false,
+    fireCD: 18, damage: 1.2, bulletSize: 4, pierce: false,
     burstCount: 1, spreadAngle: 0, bulletSpeed: BULLET_SPEED,
+    maxDamage: 5,   maxBulletSize: 8,
   },
   {
     id: 'smg', name: 'SMG', color: '#82e0aa',
     tag: 'Fast fire, low damage',
-    statA: 'CD: 6  ·  DMG: 0.5',
+    statA: 'CD: 8  ·  DMG: 0.5',
     statB: 'No pierce',
-    fireCD: 6, damage: 0.5, bulletSize: 3, pierce: false,
+    fireCD: 8, damage: 0.5, bulletSize: 3, pierce: false,
     burstCount: 1, spreadAngle: 0, bulletSpeed: BULLET_SPEED,
+    maxDamage: 2.5, maxBulletSize: 6,
   },
   {
     id: 'shotgun', name: 'Shotgun', color: '#f0b27a',
     tag: '5-pellet spread burst',
-    statA: 'CD: 40  ·  DMG: 1×5',
+    statA: 'CD: 42  ·  DMG: 1×5',
     statB: 'No pierce',
-    fireCD: 40, damage: 1, bulletSize: 3, pierce: false,
+    fireCD: 42, damage: 1, bulletSize: 3, pierce: false,
     burstCount: 5, spreadAngle: 0.20, bulletSpeed: BULLET_SPEED,
+    maxDamage: 2.5, maxBulletSize: 6,
   },
   {
     id: 'sniper', name: 'Sniper', color: '#85c1e9',
-    tag: 'Slow, high DMG',
+    tag: 'Slow, high DMG, pierce',
     statA: 'CD: 55  ·  DMG: 4',
     statB: 'Pierces all enemies',
     fireCD: 55, damage: 4, bulletSize: 3, pierce: true,
     burstCount: 1, spreadAngle: 0, bulletSpeed: BULLET_SPEED * 2.2,
+    maxDamage: 9,   maxBulletSize: 5,
   },
   {
     id: 'cannon', name: 'Cannon', color: '#c39bd3',
-    tag: 'Huge slow projectile',
-    statA: 'CD: 60  ·  DMG: 3',
+    tag: 'Huge slow slug, pierce',
+    statA: 'CD: 60  ·  DMG: 4',
     statB: 'Pierces all enemies',
-    fireCD: 60, damage: 3, bulletSize: 10, pierce: true,
+    fireCD: 60, damage: 4, bulletSize: 10, pierce: true,
     burstCount: 1, spreadAngle: 0, bulletSpeed: BULLET_SPEED * 0.6,
+    maxDamage: 9,   maxBulletSize: 14,
   },
 ];
 
@@ -732,7 +724,19 @@ const Game = {
     this.player.update(this.enemies);
     this.player.tryFire(this.bullets);
 
+    const wasPlaying = !this.waveManager.betweenWaves;
     this.waveManager.update(this.enemies);
+
+    // Round just ended — sweep remaining enemies off the field
+    if (wasPlaying && this.waveManager.betweenWaves) {
+      const deathColors = { slow: '#ff6666', medium: '#f0a050', fast: '#c39bd3', heavy: '#2e86c1', elite: '#f1c40f' };
+      for (const e of this.enemies) {
+        for (let i = 0; i < 8; i++) {
+          this.particles.push(new Particle(e.x, e.y, deathColors[e.type] || '#aaa'));
+        }
+      }
+      this.enemies = [];
+    }
 
     // Update enemies
     for (const e of this.enemies) {
@@ -891,7 +895,7 @@ const Game = {
       ctx.fillStyle = '#f1c40f';
       ctx.font = 'bold 32px Courier New';
       ctx.textAlign = 'center';
-      ctx.fillText(`Wave ${this.waveManager.wave - 1} cleared!  Next wave incoming…`, W / 2, H / 2 + 10);
+      ctx.fillText(`Round ${this.waveManager.wave - 1} complete!  Next round incoming…`, W / 2, H / 2 + 10);
     }
   },
 
@@ -900,10 +904,22 @@ const Game = {
     ctx.fillStyle = '#ecf0f1';
     ctx.font = 'bold 18px Courier New';
     ctx.textAlign = 'left';
-    ctx.fillText(`Wave ${this.waveManager.wave}${this.waveManager.endless ? ' (Endless)' : ''}`, 14, 24);
+    ctx.fillText(`Round ${this.waveManager.wave}`, 14, 24);
 
-    // Enemy count
-    ctx.fillText(`Enemies: ${this.enemies.length}`, 14, 46);
+    // Countdown timer
+    const secsLeft = this.waveManager.betweenWaves ? 0 : this.waveManager.roundSecsLeft;
+    const timerColor = secsLeft <= 10 ? '#e74c3c' : '#ecf0f1';
+    ctx.fillStyle = timerColor;
+    ctx.fillText(`${secsLeft}s left`, 14, 46);
+
+    // Round progress bar (thin, under the text)
+    const tbw = 100, tbh = 4, tbx = 14, tby = 52;
+    const timeRatio = this.waveManager.betweenWaves ? 0
+      : this.waveManager.roundTimer / this.waveManager.roundDuration;
+    ctx.fillStyle = '#333';
+    ctx.fillRect(tbx, tby, tbw, tbh);
+    ctx.fillStyle = secsLeft <= 10 ? '#e74c3c' : '#2ecc71';
+    ctx.fillRect(tbx, tby, tbw * timeRatio, tbh);
 
     // Score + Level (top-right)
     ctx.textAlign = 'right';
@@ -1018,7 +1034,7 @@ const Game = {
     const isWave  = this.levelUpReason === 'wave';
     const isElite = this.levelUpReason === 'elite';
     const titleText = isElite ? 'ELITE DEFEATED!'
-      : isWave  ? `WAVE ${this.waveManager.wave - 1} CLEARED!`
+      : isWave  ? `ROUND ${this.waveManager.wave - 1} COMPLETE!`
       : `LEVEL UP!  →  ${this.player.level}`;
     const titleColor = isElite ? '#f1c40f' : isWave ? '#2ecc71' : '#f1c40f';
 
@@ -1188,7 +1204,7 @@ const Game = {
 
     ctx.fillStyle = '#ecf0f1';
     ctx.font = '24px Courier New';
-    ctx.fillText(`You reached Wave ${this.finalWave}`, W / 2, 255);
+    ctx.fillText(`You reached Round ${this.finalWave}`, W / 2, 255);
     ctx.fillText(`Total kills: ${this.score}`, W / 2, 290);
     ctx.fillText(`Level: ${this.player.level}`, W / 2, 325);
 

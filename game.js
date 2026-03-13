@@ -1101,21 +1101,11 @@ const Game = {
     this.bullets = this.bullets.filter(b => !b.dead);
 
     // Update XP orbs and check pickup
-    const vacuuming = this.waveManager.betweenWaves;
-    const VACUUM_SPEED = 14;
     for (const orb of this.xpOrbs) {
       orb.update();
-      if (!orb.dead) {
-        const d = dist(orb, this.player);
-        if (vacuuming && d > 1) {
-          const angle = Math.atan2(this.player.y - orb.y, this.player.x - orb.x);
-          orb.x += Math.cos(angle) * Math.min(VACUUM_SPEED, d);
-          orb.y += Math.sin(angle) * Math.min(VACUUM_SPEED, d);
-        }
-        if (d < XP_PICKUP_RADIUS || (vacuuming && d < 8)) {
-          this.player.addXP(orb.value);
-          orb.dead = true;
-        }
+      if (!orb.dead && dist(orb, this.player) < XP_PICKUP_RADIUS) {
+        this.player.addXP(orb.value);
+        orb.dead = true;
       }
     }
     this.xpOrbs = this.xpOrbs.filter(o => !o.dead);
@@ -1123,20 +1113,12 @@ const Game = {
     // Update elite orbs — collecting one opens the upgrade screen
     for (const orb of this.eliteOrbs) {
       orb.update();
-      if (!orb.dead) {
-        const d = dist(orb, this.player);
-        if (vacuuming && d > 1) {
-          const angle = Math.atan2(this.player.y - orb.y, this.player.x - orb.x);
-          orb.x += Math.cos(angle) * Math.min(VACUUM_SPEED, d);
-          orb.y += Math.sin(angle) * Math.min(VACUUM_SPEED, d);
-        }
-        if (d < XP_PICKUP_RADIUS || (vacuuming && d < 8)) {
-          orb.dead = true;
-          this.levelUpReason  = 'elite';
-          this.levelUpChoices = this._pickUpgrades(3);
-          this.state = STATES.LEVEL_UP;
-          break;
-        }
+      if (!orb.dead && dist(orb, this.player) < XP_PICKUP_RADIUS) {
+        orb.dead = true;
+        this.levelUpReason  = 'elite';
+        this.levelUpChoices = this._pickUpgrades(3);
+        this.state = STATES.LEVEL_UP;
+        break;
       }
     }
     this.eliteOrbs = this.eliteOrbs.filter(o => !o.dead);

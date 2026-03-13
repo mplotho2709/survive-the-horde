@@ -197,13 +197,14 @@ class Enemy {
     this.x = x;
     this.y = y;
     this.type = type;
-    this.r = type === 'elite' ? 26 : type === 'heavy' ? 18 : type === 'slow' ? 14 : 12;
+    this.r = type === 'elite' ? 26 : type === 'heavy' ? 18 : type === 'slow' || type === 'charger' ? 14 : 12;
     const stats = {
-      slow:   { hp: 3,  speed: 1.0 },
-      medium: { hp: 5,  speed: 1.5 },
-      fast:   { hp: 3,  speed: 2.5 },
-      heavy:  { hp: 8,  speed: 0.8 },
-      elite:  { hp: 60, speed: 1.0 },
+      slow:    { hp: 3,  speed: 1.0 },
+      medium:  { hp: 5,  speed: 1.5 },
+      fast:    { hp: 3,  speed: 2.5 },
+      heavy:   { hp: 8,  speed: 0.8 },
+      charger: { hp: 6,  speed: 0.6 },
+      elite:   { hp: 60, speed: 1.0 },
     };
     // HP grows 22% per wave; speed grows 6% per wave (elites scale harder)
     const hpScale    = type === 'elite' ? 1 + (wave - 1) * 0.35 : 1 + (wave - 1) * 0.22;
@@ -211,13 +212,65 @@ class Enemy {
     this.speed  = stats[type].speed * speedScale;
     this.maxHp  = Math.ceil(stats[type].hp * hpScale);
     this.hp     = this.maxHp;
+
+    // Charger state machine
+    if (type === 'charger') {
+      this.chargeState  = 'idle';   // idle → windup → dash → cooldown
+      this.chargeTimer  = 80 + Math.floor(Math.random() * 40); // frames until next windup
+      this.dashAngle    = 0;
+      this.dashSpeed    = 0;
+    }
   }
 
   update(player) {
+    if (this.type === 'charger') {
+      this._updateCharger(player);
+      return;
+    }
     const angle = Math.atan2(player.y - this.y, player.x - this.x);
     const spd = Math.min(this.speed, player.moveSpeed * 0.95);
     this.x += Math.cos(angle) * spd;
     this.y += Math.sin(angle) * spd;
+  }
+
+  _updateCharger(player) {
+    this.chargeTimer--;
+    if (this.chargeState === 'idle') {
+      // Slowly drift toward player while waiting
+      const angle = Math.atan2(player.y - this.y, player.x - this.x);
+      this.x += Math.cos(angle) * this.speed;
+      this.y += Math.sin(angle) * this.speed;
+      if (this.chargeTimer <= 0) {
+        this.chargeState = 'windup';
+        this.chargeTimer = 70; // windup duration
+        this.dashAngle   = Math.atan2(player.y - this.y, player.x - this.x);
+      }
+    } else if (this.chargeState === 'windup') {
+      // Stand still — update target angle during first 80% of windup, then lock it
+      if (this.chargeTimer > 14) {
+        this.dashAngle = Math.atan2(player.y - this.y, player.x - this.x);
+      }
+      if (this.chargeTimer <= 0) {
+        this.chargeState = 'dash';
+        this.chargeTimer = 35; // dash duration
+        this.dashSpeed   = player.moveSpeed * 3.5;
+      }
+    } else if (this.chargeState === 'dash') {
+      this.x += Math.cos(this.dashAngle) * this.dashSpeed;
+      this.y += Math.sin(this.dashAngle) * this.dashSpeed;
+      // Clamp to arena
+      this.x = Math.max(this.r, Math.min(W - this.r, this.x));
+      this.y = Math.max(this.r, Math.min(H - this.r, this.y));
+      if (this.chargeTimer <= 0) {
+        this.chargeState = 'cooldown';
+        this.chargeTimer = 50;
+      }
+    } else if (this.chargeState === 'cooldown') {
+      if (this.chargeTimer <= 0) {
+        this.chargeState = 'idle';
+        this.chargeTimer = 80 + Math.floor(Math.random() * 40);
+      }
+    }
   }
 
   draw() {
@@ -256,6 +309,11 @@ class Enemy {
       return;
     }
 
+    if (this.type === 'charger') {
+      this._drawCharger();
+      return;
+    }
+
     const colors = {
       slow:   { fill: '#cc3333', outline: '#ff8080' },
       medium: { fill: '#e67e22', outline: '#f0a050' },
@@ -273,6 +331,72 @@ class Enemy {
     ctx.stroke();
 
     // HP bar above enemy (only when damaged)
+    if (this.hp < this.maxHp) {
+      const bw = this.r * 2 + 4;
+      const bx = this.x - bw / 2;
+      const by = this.y - this.r - 8;
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(bx, by, bw, 4);
+      ctx.fillStyle = '#e74c3c';
+      ctx.fillRect(bx, by, bw * (this.hp / this.maxHp), 4);
+    }
+  }
+
+  _drawCharger() {
+    ctx.save();
+    const isDash   = this.chargeState === 'dash';
+    const isWindup = this.chargeState === 'windup';
+
+    // Body — bright red-orange, glows during dash
+    if (isDash) {
+      ctx.shadowColor = '#ff4500';
+      ctx.shadowBlur  = 20;
+    }
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    ctx.fillStyle   = isDash ? '#ff4500' : '#c0392b';
+    ctx.fill();
+    ctx.strokeStyle = '#ff6b35';
+    ctx.lineWidth   = 2;
+    ctx.stroke();
+    ctx.restore();
+
+    // Windup indicator: pulsing ring + arrow pointing at locked target
+    if (isWindup) {
+      const progress  = 1 - this.chargeTimer / 70; // 0→1 as windup completes
+      const ringR     = this.r + 6 + progress * 10;
+      const alpha     = 0.4 + progress * 0.6;
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      // Expanding ring
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, ringR, 0, Math.PI * 2);
+      ctx.strokeStyle = '#ff4500';
+      ctx.lineWidth   = 2 + progress * 3;
+      ctx.stroke();
+
+      // Arrow showing dash direction
+      const ax   = this.x + Math.cos(this.dashAngle) * (this.r + 18 + progress * 10);
+      const ay   = this.y + Math.sin(this.dashAngle) * (this.r + 18 + progress * 10);
+      const aLen = 10 + progress * 6;
+      ctx.strokeStyle = '#ffcc00';
+      ctx.lineWidth   = 3;
+      ctx.beginPath();
+      ctx.moveTo(this.x + Math.cos(this.dashAngle) * (this.r + 4), this.y + Math.sin(this.dashAngle) * (this.r + 4));
+      ctx.lineTo(ax, ay);
+      ctx.stroke();
+      // Arrowhead
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(ax - Math.cos(this.dashAngle - 0.5) * aLen, ay - Math.sin(this.dashAngle - 0.5) * aLen);
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(ax - Math.cos(this.dashAngle + 0.5) * aLen, ay - Math.sin(this.dashAngle + 0.5) * aLen);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // HP bar (when damaged)
     if (this.hp < this.maxHp) {
       const bw = this.r * 2 + 4;
       const bx = this.x - bw / 2;
@@ -370,8 +494,11 @@ class WaveManager {
     if (w <= 4) pool.push('slow', 'slow');
     if (w >= 2) pool.push('fast', 'fast');
     if (w >= 3) pool.push('heavy');
+    if (w >= 4) pool.push('charger');
     if (w >= 5) pool.push('heavy', 'fast');
+    if (w >= 6) pool.push('charger');
     if (w >= 7) pool.push('heavy', 'heavy');
+    if (w >= 9) pool.push('charger', 'charger');
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
@@ -531,7 +658,8 @@ const XP_ORB_CONFIG = {
   slow:   { value: 1, color: '#27ae60', glow: '#2ecc71' }, // green  – 1 XP
   medium: { value: 2, color: '#1a6da8', glow: '#3498db' }, // blue   – 2 XP
   fast:   { value: 2, color: '#1a6da8', glow: '#3498db' }, // blue   – 2 XP
-  heavy:  { value: 4, color: '#b7770d', glow: '#f1c40f' }, // gold   – 4 XP
+  heavy:   { value: 4, color: '#b7770d', glow: '#f1c40f' }, // gold   – 4 XP
+  charger: { value: 3, color: '#c0392b', glow: '#ff6b35' }, // red    – 3 XP
 };
 
 // ── Rarity system ──────────────────────────────────────────────────────────

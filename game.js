@@ -204,6 +204,7 @@ class Enemy {
       fast:    { hp: 3,  speed: 2.5 },
       heavy:   { hp: 8,  speed: 0.8 },
       charger: { hp: 6,  speed: 0.6 },
+      shooter: { hp: 4,  speed: 1.1 },
       elite:   { hp: 60, speed: 1.0 },
     };
     // HP grows 22% per wave; speed grows 6% per wave (elites scale harder)
@@ -220,17 +221,58 @@ class Enemy {
       this.dashAngle    = 0;
       this.dashSpeed    = 0;
     }
+
+    // Shooter state
+    if (type === 'shooter') {
+      this.shootTimer = 90 + Math.floor(Math.random() * 60); // frames until first shot
+      this.preferredDist = 200; // tries to stay this far from player
+    }
   }
 
-  update(player) {
+  update(player, enemyBullets) {
     if (this.type === 'charger') {
       this._updateCharger(player);
+      return;
+    }
+    if (this.type === 'shooter') {
+      this._updateShooter(player, enemyBullets);
       return;
     }
     const angle = Math.atan2(player.y - this.y, player.x - this.x);
     const spd = Math.min(this.speed, player.moveSpeed * 0.95);
     this.x += Math.cos(angle) * spd;
     this.y += Math.sin(angle) * spd;
+  }
+
+  _updateShooter(player, enemyBullets) {
+    const angle = Math.atan2(player.y - this.y, player.x - this.x);
+    const d     = dist(this, player);
+    const spd   = Math.min(this.speed, player.moveSpeed * 0.95);
+
+    // Strafe: keep preferred distance — back away if too close, close in if too far
+    if (d < this.preferredDist - 30) {
+      // Too close — retreat
+      this.x -= Math.cos(angle) * spd;
+      this.y -= Math.sin(angle) * spd;
+    } else if (d > this.preferredDist + 60) {
+      // Too far — move in
+      this.x += Math.cos(angle) * spd;
+      this.y += Math.sin(angle) * spd;
+    } else {
+      // In range — strafe sideways
+      this.x += Math.cos(angle + Math.PI / 2) * spd * 0.6;
+      this.y += Math.sin(angle + Math.PI / 2) * spd * 0.6;
+    }
+    this.x = Math.max(this.r, Math.min(W - this.r, this.x));
+    this.y = Math.max(this.r, Math.min(H - this.r, this.y));
+
+    // Shoot
+    this.shootTimer--;
+    if (this.shootTimer <= 0) {
+      const shootAngle = Math.atan2(player.y - this.y, player.x - this.x);
+      enemyBullets.push(new EnemyBullet(this.x, this.y, shootAngle));
+      this.shootTimer = 80 + Math.floor(Math.random() * 40);
+    }
   }
 
   _updateCharger(player) {
@@ -309,10 +351,8 @@ class Enemy {
       return;
     }
 
-    if (this.type === 'charger') {
-      this._drawCharger();
-      return;
-    }
+    if (this.type === 'charger') { this._drawCharger(); return; }
+    if (this.type === 'shooter') { this._drawShooter(); return; }
 
     const colors = {
       slow:   { fill: '#cc3333', outline: '#ff8080' },
@@ -335,6 +375,46 @@ class Enemy {
       const bw = this.r * 2 + 4;
       const bx = this.x - bw / 2;
       const by = this.y - this.r - 8;
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(bx, by, bw, 4);
+      ctx.fillStyle = '#e74c3c';
+      ctx.fillRect(bx, by, bw * (this.hp / this.maxHp), 4);
+    }
+  }
+
+  _drawShooter() {
+    // Teal diamond body
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(Math.PI / 4);
+    const s = this.r * 1.1;
+    ctx.beginPath();
+    ctx.rect(-s / 2, -s / 2, s, s);
+    ctx.fillStyle = '#117a65';
+    ctx.fill();
+    ctx.strokeStyle = '#1abc9c';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+
+    // Muzzle flash indicator — small pulsing dot showing it can shoot
+    if (this.shootTimer < 25) {
+      const pulse = 1 - this.shootTimer / 25;
+      ctx.save();
+      ctx.globalAlpha = pulse;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.r + 5 + pulse * 6, 0, Math.PI * 2);
+      ctx.strokeStyle = '#e74c3c';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // HP bar (when damaged)
+    if (this.hp < this.maxHp) {
+      const bw = this.r * 2 + 4;
+      const bx = this.x - bw / 2;
+      const by = this.y - this.r - 10;
       ctx.fillStyle = '#1a1a1a';
       ctx.fillRect(bx, by, bw, 4);
       ctx.fillStyle = '#e74c3c';
@@ -444,6 +524,44 @@ class Bullet {
   }
 }
 
+// ── EnemyBullet ────────────────────────────────────────────────────────────
+class EnemyBullet {
+  constructor(x, y, angle) {
+    this.x    = x;
+    this.y    = y;
+    const spd = 3.5;
+    this.vx   = Math.cos(angle) * spd;
+    this.vy   = Math.sin(angle) * spd;
+    this.r    = 5;
+    this.damage = 12;
+    this.life   = 180;
+    this.dead   = false;
+  }
+
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.life--;
+    if (this.life <= 0 || this.x < -20 || this.x > W + 20 || this.y < -20 || this.y > H + 20)
+      this.dead = true;
+  }
+
+  draw() {
+    ctx.save();
+    ctx.shadowColor = '#e74c3c';
+    ctx.shadowBlur  = 8;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    ctx.fillStyle = '#c0392b';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r * 0.4, 0, Math.PI * 2);
+    ctx.fillStyle = '#ff8080';
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
 // ── WaveManager ────────────────────────────────────────────────────────────
 class WaveManager {
   constructor() {
@@ -493,7 +611,7 @@ class WaveManager {
     const pool = ['medium', 'medium', 'medium'];
     if (w <= 4) pool.push('slow', 'slow');
     if (w >= 2) pool.push('fast', 'fast');
-    if (w >= 3) pool.push('heavy');
+    if (w >= 3) pool.push('heavy', 'shooter');
     if (w >= 4) pool.push('charger');
     if (w >= 5) pool.push('heavy', 'fast');
     if (w >= 6) pool.push('charger');
@@ -660,6 +778,7 @@ const XP_ORB_CONFIG = {
   fast:   { value: 2, color: '#1a6da8', glow: '#3498db' }, // blue   – 2 XP
   heavy:   { value: 4, color: '#b7770d', glow: '#f1c40f' }, // gold   – 4 XP
   charger: { value: 3, color: '#c0392b', glow: '#ff6b35' }, // red    – 3 XP
+  shooter: { value: 3, color: '#117a65', glow: '#1abc9c' }, // teal   – 3 XP
 };
 
 // ── Rarity system ──────────────────────────────────────────────────────────
@@ -820,6 +939,7 @@ const Game = {
     this.particles      = [];
     this.xpOrbs         = [];
     this.eliteOrbs      = [];
+    this.enemyBullets   = [];
     this.waveManager    = new WaveManager();
     this.score          = 0;
     this.levelUpChoices    = [];
@@ -882,12 +1002,22 @@ const Game = {
 
     // Update enemies
     for (const e of this.enemies) {
-      e.update(this.player);
+      e.update(this.player, this.enemyBullets);
       // Enemy↔player collision — damage scales 10% per wave
       if (dist(e, this.player) < e.r + this.player.r) {
         this.player.hp -= ENEMY_DAMAGE * (1 + (this.waveManager.wave - 1) * 0.10);
       }
     }
+
+    // Update enemy bullets and check player hit
+    for (const b of this.enemyBullets) {
+      b.update();
+      if (!b.dead && dist(b, this.player) < b.r + this.player.r) {
+        this.player.hp -= b.damage;
+        b.dead = true;
+      }
+    }
+    this.enemyBullets = this.enemyBullets.filter(b => !b.dead);
 
     // Update bullets
     for (const b of this.bullets) b.update();
@@ -1036,8 +1166,9 @@ const Game = {
     for (const p of this.particles) p.draw();
     for (const o of this.xpOrbs)    o.draw();
     for (const o of this.eliteOrbs) o.draw();
-    for (const b of this.bullets)   b.draw();
-    for (const e of this.enemies)   e.draw();
+    for (const b of this.bullets)        b.draw();
+    for (const b of this.enemyBullets)   b.draw();
+    for (const e of this.enemies)        e.draw();
     this.player.draw();
     this.drawHUD();
 

@@ -70,6 +70,7 @@ class Player {
     this.spreadAngle       = weapon.spreadAngle;
     this.bulletSpeed       = weapon.bulletSpeed;
     this.bulletColor       = weapon.color;
+    this.bulletLifetime    = weapon.bulletLifetime;
     // Upgrade-only stats
     this.moveSpeed         = PLAYER_SPEED;
     this.regenRate         = 0;
@@ -128,7 +129,7 @@ class Player {
           this.x, this.y,
           this.aimAngle + spread,
           this.bulletDamage, this.bulletSize,
-          this.pierce, this.bulletSpeed, this.bulletColor
+          this.pierce, this.bulletSpeed, this.bulletColor, this.bulletLifetime
         ));
       }
       this.fireCooldown = this.fireCooldownMax;
@@ -285,12 +286,12 @@ class Enemy {
 
 // ── Bullet ─────────────────────────────────────────────────────────────────
 class Bullet {
-  constructor(x, y, angle, damage = 1, size = 4, pierce = false, speed = BULLET_SPEED, color = '#ffe082') {
+  constructor(x, y, angle, damage = 1, size = 4, pierce = false, speed = BULLET_SPEED, color = '#ffe082', lifetime = BULLET_LIFETIME) {
     this.x    = x;
     this.y    = y;
     this.vx   = Math.cos(angle) * speed;
     this.vy   = Math.sin(angle) * speed;
-    this.life = BULLET_LIFETIME;
+    this.life = lifetime;
     this.damage = damage;
     this.size   = size;
     this.pierce = pierce;
@@ -610,45 +611,50 @@ const WEAPONS = [
     id: 'pistol', name: 'Pistol', color: '#ffe082',
     tag: 'Balanced all-rounder',
     statA: 'CD: 18  ·  DMG: 1.2',
-    statB: 'No pierce',
+    statB: 'Medium range',
     fireCD: 18, damage: 1.2, bulletSize: 4, pierce: false,
     burstCount: 1, spreadAngle: 0, bulletSpeed: BULLET_SPEED,
+    bulletLifetime: 100,
     maxDamage: 5,   maxBulletSize: 8,
   },
   {
     id: 'smg', name: 'SMG', color: '#82e0aa',
-    tag: 'Fast fire, low damage',
+    tag: 'Fast fire, short range',
     statA: 'CD: 8  ·  DMG: 0.5',
-    statB: 'No pierce',
+    statB: 'Short range',
     fireCD: 8, damage: 0.5, bulletSize: 3, pierce: false,
     burstCount: 1, spreadAngle: 0, bulletSpeed: BULLET_SPEED,
+    bulletLifetime: 55,
     maxDamage: 2.5, maxBulletSize: 6,
   },
   {
     id: 'shotgun', name: 'Shotgun', color: '#f0b27a',
-    tag: '5-pellet spread burst',
+    tag: '5-pellet burst, close range',
     statA: 'CD: 42  ·  DMG: 1×5',
-    statB: 'No pierce',
+    statB: 'Very short range',
     fireCD: 42, damage: 1, bulletSize: 3, pierce: false,
     burstCount: 5, spreadAngle: 0.20, bulletSpeed: BULLET_SPEED,
+    bulletLifetime: 38,
     maxDamage: 2.5, maxBulletSize: 6,
   },
   {
     id: 'sniper', name: 'Sniper', color: '#85c1e9',
     tag: 'Slow, high DMG, pierce',
     statA: 'CD: 55  ·  DMG: 4',
-    statB: 'Pierces all enemies',
+    statB: 'Very long range, pierce',
     fireCD: 55, damage: 4, bulletSize: 3, pierce: true,
     burstCount: 1, spreadAngle: 0, bulletSpeed: BULLET_SPEED * 2.2,
+    bulletLifetime: 85,
     maxDamage: 9,   maxBulletSize: 5,
   },
   {
     id: 'cannon', name: 'Cannon', color: '#c39bd3',
     tag: 'Huge slow slug, pierce',
     statA: 'CD: 60  ·  DMG: 4',
-    statB: 'Pierces all enemies',
+    statB: 'Medium range, pierce',
     fireCD: 60, damage: 4, bulletSize: 10, pierce: true,
     burstCount: 1, spreadAngle: 0, bulletSpeed: BULLET_SPEED * 0.6,
+    bulletLifetime: 130,
     maxDamage: 9,   maxBulletSize: 14,
   },
 ];

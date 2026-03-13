@@ -19,6 +19,25 @@ const ENEMY_COLORS = {
   heavy:  { fill: '#1a5276', outline: '#2e86c1' },
 };
 
+// ── Leaderboard ────────────────────────────────────────────────────────────
+const Leaderboard = {
+  KEY: 'sth_scores',
+  MAX: 10,
+  load() {
+    try { return JSON.parse(localStorage.getItem(this.KEY)) || []; }
+    catch { return []; }
+  },
+  save(score, wave, level) {
+    const entries = this.load();
+    const date = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' });
+    entries.push({ score, wave, level, date });
+    entries.sort((a, b) => b.score - a.score);
+    entries.splice(this.MAX);
+    localStorage.setItem(this.KEY, JSON.stringify(entries));
+    return entries;
+  },
+};
+
 // ── Canvas setup ───────────────────────────────────────────────────────────
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -949,6 +968,7 @@ const Game = {
     this.enemyBullets   = [];
     this.waveManager    = new WaveManager();
     this.score          = 0;
+    this.scores         = Leaderboard.load();
     this.levelUpChoices    = [];
     this.levelUpReason     = 'level';
     this.waveUpgradeForWave = 0;
@@ -1140,6 +1160,7 @@ const Game = {
     if (this.player.hp <= 0) {
       this.player.hp = 0;
       this.finalWave = this.waveManager.wave;
+      this.scores    = Leaderboard.save(this.score, this.finalWave, this.player.level);
       this.state = STATES.GAME_OVER;
     }
   },
@@ -1492,32 +1513,142 @@ const Game = {
   },
 
   drawGameOver() {
-    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.fillStyle = 'rgba(0,0,0,0.82)';
     ctx.fillRect(0, 0, W, H);
 
+    const isNewBest = this.scores.length > 0 && this.scores[0].score === this.score;
+
+    // ── Left column: run summary ──────────────────────────────────────────
+    const lx = 225; // center of left column
     ctx.textAlign = 'center';
 
     ctx.fillStyle = '#e74c3c';
-    ctx.font = 'bold 60px Courier New';
-    ctx.fillText('GAME  OVER', W / 2, 190);
+    ctx.font = 'bold 52px Courier New';
+    ctx.shadowColor = '#e74c3c';
+    ctx.shadowBlur = 14;
+    ctx.fillText('GAME OVER', lx, 110);
+    ctx.shadowBlur = 0;
+
+    if (isNewBest) {
+      ctx.fillStyle = '#f1c40f';
+      ctx.font = 'bold 16px Courier New';
+      ctx.shadowColor = '#f1c40f';
+      ctx.shadowBlur = 10;
+      ctx.fillText('★  NEW HIGH SCORE  ★', lx, 140);
+      ctx.shadowBlur = 0;
+    }
 
     ctx.fillStyle = '#ecf0f1';
-    ctx.font = '24px Courier New';
-    ctx.fillText(`You reached Round ${this.finalWave}`, W / 2, 255);
-    ctx.fillText(`Total kills: ${this.score}`, W / 2, 290);
-    ctx.fillText(`Level: ${this.player.level}`, W / 2, 325);
+    ctx.font = '20px Courier New';
+    ctx.fillText(`Round ${this.finalWave}`, lx, 185);
+    ctx.fillText(`Kills: ${this.score}`, lx, 215);
+    ctx.fillText(`Level: ${this.player.level}`, lx, 245);
+
+    // Divider
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(40, 268); ctx.lineTo(410, 268);
+    ctx.stroke();
+
+    // Weapon used
+    ctx.fillStyle = '#7f8c8d';
+    ctx.font = '15px Courier New';
+    ctx.fillText(`Weapon: ${this.player.weapon.name}`, lx, 292);
 
     // Play again button
     ctx.fillStyle = '#2980b9';
-    roundRect(ctx, W / 2 - 120, 370, 240, 52, 8);
+    roundRect(ctx, lx - 110, 330, 220, 48, 8);
     ctx.fill();
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 22px Courier New';
-    ctx.fillText('PLAY AGAIN', W / 2, 403);
+    ctx.font = 'bold 20px Courier New';
+    ctx.fillText('PLAY AGAIN', lx, 361);
 
     ctx.fillStyle = '#7f8c8d';
-    ctx.font = '14px Courier New';
-    ctx.fillText('or press  ENTER', W / 2, 455);
+    ctx.font = '13px Courier New';
+    ctx.fillText('or press ENTER', lx, 406);
+
+    // ── Right column: leaderboard ─────────────────────────────────────────
+    const rx = 670; // center of right column
+    const lbX = 460, lbW = 420;
+
+    // Panel background
+    ctx.fillStyle = 'rgba(15,15,30,0.9)';
+    roundRect(ctx, lbX, 30, lbW, 540, 8);
+    ctx.fill();
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
+    roundRect(ctx, lbX, 30, lbW, 540, 8);
+    ctx.stroke();
+
+    // Title
+    ctx.fillStyle = '#f1c40f';
+    ctx.font = 'bold 18px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('LEADERBOARD', rx, 65);
+
+    // Column headers
+    ctx.fillStyle = '#7f8c8d';
+    ctx.font = '12px Courier New';
+    ctx.textAlign = 'left';
+    ctx.fillText('#', lbX + 16, 94);
+    ctx.fillText('Kills', lbX + 46, 94);
+    ctx.fillText('Rnd', lbX + 150, 94);
+    ctx.fillText('Lvl', lbX + 220, 94);
+    ctx.fillText('Date', lbX + 290, 94);
+
+    ctx.strokeStyle = '#333';
+    ctx.beginPath();
+    ctx.moveTo(lbX + 12, 100); ctx.lineTo(lbX + lbW - 12, 100);
+    ctx.stroke();
+
+    // Entries
+    const entries = this.scores;
+    const rowH = 46;
+    for (let i = 0; i < Math.min(entries.length, 10); i++) {
+      const e  = entries[i];
+      const ey = 110 + i * rowH;
+      const isThisRun = e.score === this.score && e.wave === this.finalWave && e.level === this.player.level && i === entries.findIndex(x => x.score === this.score);
+
+      // Highlight current run
+      if (isThisRun) {
+        ctx.fillStyle = 'rgba(241,196,15,0.12)';
+        roundRect(ctx, lbX + 8, ey - 14, lbW - 16, rowH - 4, 4);
+        ctx.fill();
+      }
+
+      // Rank medal for top 3
+      const rankColors = ['#f1c40f', '#bdc3c7', '#cd7f32'];
+      ctx.fillStyle = i < 3 ? rankColors[i] : '#7f8c8d';
+      ctx.font = i < 3 ? 'bold 14px Courier New' : '13px Courier New';
+      ctx.textAlign = 'left';
+      ctx.fillText(`${i + 1}`, lbX + 16, ey + 4);
+
+      ctx.fillStyle = isThisRun ? '#f1c40f' : '#ecf0f1';
+      ctx.font = isThisRun ? 'bold 15px Courier New' : '14px Courier New';
+      ctx.fillText(`${e.score}`, lbX + 46, ey + 4);
+
+      ctx.fillStyle = '#bdc3c7';
+      ctx.font = '13px Courier New';
+      ctx.fillText(`${e.wave}`, lbX + 150, ey + 4);
+      ctx.fillText(`${e.level}`, lbX + 220, ey + 4);
+      ctx.fillStyle = '#7f8c8d';
+      ctx.fillText(`${e.date}`, lbX + 290, ey + 4);
+
+      if (i < 9 && i < entries.length - 1) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+        ctx.beginPath();
+        ctx.moveTo(lbX + 12, ey + rowH - 6); ctx.lineTo(lbX + lbW - 12, ey + rowH - 6);
+        ctx.stroke();
+      }
+    }
+
+    if (entries.length === 0) {
+      ctx.fillStyle = '#555';
+      ctx.font = '14px Courier New';
+      ctx.textAlign = 'center';
+      ctx.fillText('No scores yet', rx, 200);
+    }
   },
 
   handleClick(mx, my) {
@@ -1535,7 +1666,7 @@ const Game = {
         this.start();
       }
     } else if (this.state === STATES.GAME_OVER) {
-      if (mx >= W / 2 - 120 && mx <= W / 2 + 120 && my >= 370 && my <= 422) {
+      if (mx >= 115 && mx <= 335 && my >= 330 && my <= 378) {
         this.state = STATES.MENU;
       }
     } else if (this.state === STATES.LEVEL_UP) {

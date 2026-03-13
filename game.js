@@ -215,8 +215,9 @@ class Enemy {
 
   update(player) {
     const angle = Math.atan2(player.y - this.y, player.x - this.x);
-    this.x += Math.cos(angle) * this.speed;
-    this.y += Math.sin(angle) * this.speed;
+    const spd = Math.min(this.speed, player.moveSpeed * 0.95);
+    this.x += Math.cos(angle) * spd;
+    this.y += Math.sin(angle) * spd;
   }
 
   draw() {

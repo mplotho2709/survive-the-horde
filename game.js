@@ -54,13 +54,14 @@ function dist(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-function randEdgePos() {
+function randEdgePos(cx = W / 2, cy = H / 2) {
+  const margin = 40;
   const side = Math.floor(Math.random() * 4);
   switch (side) {
-    case 0: return { x: Math.random() * W, y: -20 };
-    case 1: return { x: W + 20,            y: Math.random() * H };
-    case 2: return { x: Math.random() * W, y: H + 20 };
-    default: return { x: -20,              y: Math.random() * H };
+    case 0: return { x: cx - W / 2 + Math.random() * W, y: cy - H / 2 - margin };
+    case 1: return { x: cx + W / 2 + margin,            y: cy - H / 2 + Math.random() * H };
+    case 2: return { x: cx - W / 2 + Math.random() * W, y: cy + H / 2 + margin };
+    default: return { x: cx - W / 2 - margin,           y: cy - H / 2 + Math.random() * H };
   }
 }
 
@@ -120,8 +121,8 @@ class Player {
     if (keys['a'] || keys['A'] || keys['ArrowLeft'])  dx -= 1;
     if (keys['d'] || keys['D'] || keys['ArrowRight']) dx += 1;
     if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
-    this.x = Math.max(this.r, Math.min(W - this.r, this.x + dx * this.moveSpeed));
-    this.y = Math.max(this.r, Math.min(H - this.r, this.y + dy * this.moveSpeed));
+    this.x += dx * this.moveSpeed;
+    this.y += dy * this.moveSpeed;
 
     // Regeneration
     if (this.regenRate > 0) this.hp = Math.min(this.maxHp, this.hp + this.regenRate);
@@ -282,8 +283,6 @@ class Enemy {
       this.x += Math.cos(angle + Math.PI / 2) * spd * 0.6;
       this.y += Math.sin(angle + Math.PI / 2) * spd * 0.6;
     }
-    this.x = Math.max(this.r, Math.min(W - this.r, this.x));
-    this.y = Math.max(this.r, Math.min(H - this.r, this.y));
 
     // Shoot
     this.shootTimer--;
@@ -320,8 +319,6 @@ class Enemy {
       this.x += Math.cos(this.dashAngle) * this.dashSpeed;
       this.y += Math.sin(this.dashAngle) * this.dashSpeed;
       // Clamp to arena
-      this.x = Math.max(this.r, Math.min(W - this.r, this.x));
-      this.y = Math.max(this.r, Math.min(H - this.r, this.y));
       if (this.chargeTimer <= 0) {
         this.chargeState = 'cooldown';
         this.chargeTimer = 50;
@@ -561,7 +558,7 @@ class EnemyBullet {
     this.x += this.vx;
     this.y += this.vy;
     this.life--;
-    if (this.life <= 0 || this.x < -20 || this.x > W + 20 || this.y < -20 || this.y > H + 20)
+    if (this.life <= 0)
       this.dead = true;
   }
 
@@ -645,7 +642,7 @@ class WaveManager {
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
-  update(enemies) {
+  update(enemies, player) {
     if (this.waveCleared) {
       this.betweenWaveTimer++;
       if (this.betweenWaveTimer > 120) {
@@ -666,7 +663,7 @@ class WaveManager {
     while (this.eliteQueue.length > 0 &&
            this.roundTimer <= this.eliteQueue[this.eliteQueue.length - 1]) {
       this.eliteQueue.pop();
-      const epos = randEdgePos();
+      const epos = randEdgePos(player.x, player.y);
       enemies.push(new Enemy(epos.x, epos.y, 'elite', this.wave));
     }
 
@@ -676,7 +673,7 @@ class WaveManager {
       this.spawnTimer = 0;
       const batch = Math.min(4, 1 + Math.floor((this.wave - 1) / 4));
       for (let i = 0; i < batch; i++) {
-        const pos = randEdgePos();
+        const pos = randEdgePos(player.x, player.y);
         enemies.push(new Enemy(pos.x, pos.y, this._randomType(), this.wave));
       }
     }
@@ -1014,7 +1011,7 @@ const Game = {
     this.player.tryFire(this.bullets);
 
     const wasPlaying = !this.waveManager.betweenWaves;
-    this.waveManager.update(this.enemies);
+    this.waveManager.update(this.enemies, this.player);
 
     // Round just ended — sweep remaining enemies off the field
     if (wasPlaying && this.waveManager.betweenWaves) {
@@ -1166,40 +1163,44 @@ const Game = {
   },
 
   draw() {
-    // Background
+    // ── Screen-space background (scrolling infinite grid) ──────────────────
     ctx.fillStyle = '#0d0d18';
     ctx.fillRect(0, 0, W, H);
 
-    // Grid
+    if (this.state === STATES.MENU) { this.drawMenu(); return; }
+    if (this.state === STATES.GAME_OVER) { this.drawGameOver(); return; }
+
+    // Scrolling grid — offset by camera so it tiles infinitely
+    const GRID = 40;
+    const camX = this.player.x - W / 2;
+    const camY = this.player.y - H / 2;
+    const offX = ((camX % GRID) + GRID) % GRID;
+    const offY = ((camY % GRID) + GRID) % GRID;
     ctx.strokeStyle = 'rgba(255,255,255,0.04)';
     ctx.lineWidth = 1;
-    for (let x = 0; x < W; x += 40) {
+    for (let x = -offX; x <= W + GRID; x += GRID) {
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
     }
-    for (let y = 0; y < H; y += 40) {
+    for (let y = -offY; y <= H + GRID; y += GRID) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     }
 
-    if (this.state === STATES.MENU) {
-      this.drawMenu();
-      return;
-    }
+    // ── World-space rendering (camera-transformed) ─────────────────────────
+    ctx.save();
+    ctx.translate(-camX, -camY);
 
-    if (this.state === STATES.GAME_OVER) {
-      this.drawGameOver();
-      return;
-    }
-
-    // Playing (also shown behind LEVEL_UP overlay)
     for (const p of this.particles) p.draw();
     for (const o of this.xpOrbs)    o.draw();
     for (const o of this.eliteOrbs) o.draw();
-    for (const b of this.bullets)        b.draw();
-    for (const b of this.enemyBullets)   b.draw();
-    for (const e of this.enemies)        e.draw();
+    for (const b of this.bullets)       b.draw();
+    for (const b of this.enemyBullets)  b.draw();
+    for (const e of this.enemies)       e.draw();
     this.player.draw();
-    this.drawHUD();
 
+    ctx.restore();
+
+    // ── Screen-space UI ────────────────────────────────────────────────────
+    this.drawHUD();
     if (this.showStats) this.drawStatsPanel();
 
     if (this.state === STATES.LEVEL_UP) {

@@ -1,6 +1,6 @@
 // ── Constants ──────────────────────────────────────────────────────────────
-const W = 900;
-const H = 600;
+let W = window.innerWidth;
+let H = window.innerHeight;
 const STATES = { MENU: 'MENU', PLAYING: 'PLAYING', GAME_OVER: 'GAME_OVER', LEVEL_UP: 'LEVEL_UP' };
 
 const PLAYER_SPEED = 3;
@@ -41,8 +41,15 @@ const Leaderboard = {
 // ── Canvas setup ───────────────────────────────────────────────────────────
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-canvas.width  = W;
-canvas.height = H;
+
+function resizeCanvas() {
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width  = W;
+  canvas.height = H;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
 
 // ── Input ──────────────────────────────────────────────────────────────────
 const keys = {};

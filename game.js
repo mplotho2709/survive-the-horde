@@ -597,6 +597,13 @@ const UPGRADES = [
     apply(p, v) { p.regenRate = Math.min(p.regenRate + v, 0.20); },
   },
   {
+    id: 'range', name: 'Extended Range', icon: '↔',
+    tiers: { common: 15, uncommon: 25, rare: 40 },
+    descFn: (v) => `Bullet range +${v} frames`,
+    maxed: (p) => p.bulletLifetime >= p.weapon.maxBulletLifetime,
+    apply(p, v) { p.bulletLifetime = Math.min(p.bulletLifetime + v, p.weapon.maxBulletLifetime); },
+  },
+  {
     id: 'luck', name: 'Lucky Break', icon: '★',
     tiers: { common: 1, uncommon: 1, rare: 2 },
     descFn: (v) => `Luck +${v} — better upgrade odds`,
@@ -614,7 +621,7 @@ const WEAPONS = [
     statB: 'Medium range',
     fireCD: 18, damage: 1.2, bulletSize: 4, pierce: false,
     burstCount: 1, spreadAngle: 0, bulletSpeed: BULLET_SPEED,
-    bulletLifetime: 100,
+    bulletLifetime: 100, maxBulletLifetime: 200,
     maxDamage: 5,   maxBulletSize: 8,
   },
   {
@@ -624,7 +631,7 @@ const WEAPONS = [
     statB: 'Short range',
     fireCD: 8, damage: 0.5, bulletSize: 3, pierce: false,
     burstCount: 1, spreadAngle: 0, bulletSpeed: BULLET_SPEED,
-    bulletLifetime: 55,
+    bulletLifetime: 55, maxBulletLifetime: 110,
     maxDamage: 2.5, maxBulletSize: 6,
   },
   {
@@ -634,7 +641,7 @@ const WEAPONS = [
     statB: 'Very short range',
     fireCD: 42, damage: 1, bulletSize: 3, pierce: false,
     burstCount: 5, spreadAngle: 0.20, bulletSpeed: BULLET_SPEED,
-    bulletLifetime: 38,
+    bulletLifetime: 38, maxBulletLifetime: 76,
     maxDamage: 2.5, maxBulletSize: 6,
   },
   {
@@ -644,7 +651,7 @@ const WEAPONS = [
     statB: 'Very long range, pierce',
     fireCD: 55, damage: 4, bulletSize: 3, pierce: true,
     burstCount: 1, spreadAngle: 0, bulletSpeed: BULLET_SPEED * 2.2,
-    bulletLifetime: 85,
+    bulletLifetime: 85, maxBulletLifetime: 170,
     maxDamage: 9,   maxBulletSize: 5,
   },
   {
@@ -654,7 +661,7 @@ const WEAPONS = [
     statB: 'Medium range, pierce',
     fireCD: 60, damage: 4, bulletSize: 10, pierce: true,
     burstCount: 1, spreadAngle: 0, bulletSpeed: BULLET_SPEED * 0.6,
-    bulletLifetime: 130,
+    bulletLifetime: 130, maxBulletLifetime: 260,
     maxDamage: 9,   maxBulletSize: 14,
   },
 ];
@@ -990,6 +997,7 @@ const Game = {
       { label: 'Fire Cooldown', value: `${p.fireCooldownMax} frames` },
       { label: 'Damage',      value: p.bulletDamage },
       { label: 'Proj. Size',  value: p.bulletSize },
+      { label: 'Range',       value: `${p.bulletLifetime} frames` },
       { label: 'Pierce',      value: p.pierce ? 'Yes' : 'No' },
       { label: 'Regen',       value: `${p.regenRate.toFixed(2)} HP/f` },
       null,

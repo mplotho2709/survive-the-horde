@@ -207,9 +207,9 @@ class Enemy {
       shooter: { hp: 4,  speed: 1.1 },
       elite:   { hp: 60, speed: 1.0 },
     };
-    // HP grows 22% per wave; speed grows 6% per wave (elites scale harder)
-    const hpScale    = type === 'elite' ? 1 + (wave - 1) * 0.35 : 1 + (wave - 1) * 0.22;
-    const speedScale = 1 + (wave - 1) * 0.06;
+    // HP grows 12% per wave; speed grows 3.5% per wave (elites scale harder)
+    const hpScale    = type === 'elite' ? 1 + (wave - 1) * 0.25 : 1 + (wave - 1) * 0.12;
+    const speedScale = 1 + (wave - 1) * 0.035;
     this.speed  = stats[type].speed * speedScale;
     this.maxHp  = Math.ceil(stats[type].hp * hpScale);
     this.hp     = this.maxHp;
@@ -584,13 +584,13 @@ class WaveManager {
     this.spawnTimer       = 0;
     this.betweenWaveTimer = 0;
 
-    // Round duration: 30s for round 1, +10s per round, max 120s
-    const secs         = Math.min(120, 30 + (this.wave - 1) * 10);
+    // Round duration: 20s wave 1, +7s per wave, cap 90s (reached ~wave 11)
+    const secs         = Math.min(90, 20 + (this.wave - 1) * 7);
     this.roundDuration = secs * 60;
     this.roundTimer    = this.roundDuration;
 
-    // Spawn interval: 90 frames → 20 frames minimum
-    this.spawnInterval = Math.max(20, 90 - (this.wave - 1) * 8);
+    // Spawn interval: 120 frames wave 1, –5 per wave, min 35 (reached ~wave 18)
+    this.spawnInterval = Math.max(35, 120 - (this.wave - 1) * 5);
 
     // Schedule elites evenly through every 3rd round
     this.eliteQueue = [];
@@ -608,15 +608,21 @@ class WaveManager {
 
   _randomType() {
     const w    = this.wave;
-    const pool = ['medium', 'medium', 'medium'];
-    if (w <= 4) pool.push('slow', 'slow');
-    if (w >= 2) pool.push('fast', 'fast');
-    if (w >= 3) pool.push('heavy', 'shooter');
-    if (w >= 4) pool.push('charger');
-    if (w >= 5) pool.push('heavy', 'fast');
-    if (w >= 6) pool.push('charger');
+    const pool = ['medium', 'medium'];
+    // Slow enemies phase out as waves progress
+    if (w <= 5) pool.push('slow', 'slow');
+    // Fast introduced at wave 3, becomes more common later
+    if (w >= 3) pool.push('fast');
+    if (w >= 6) pool.push('fast', 'fast');
+    // Heavy introduced at wave 4
+    if (w >= 4) pool.push('heavy');
     if (w >= 7) pool.push('heavy', 'heavy');
-    if (w >= 9) pool.push('charger', 'charger');
+    // Shooter introduced at wave 5
+    if (w >= 5) pool.push('shooter');
+    if (w >= 9) pool.push('shooter', 'shooter');
+    // Charger introduced at wave 6
+    if (w >= 6) pool.push('charger');
+    if (w >= 10) pool.push('charger', 'charger');
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
@@ -641,14 +647,15 @@ class WaveManager {
     while (this.eliteQueue.length > 0 &&
            this.roundTimer <= this.eliteQueue[this.eliteQueue.length - 1]) {
       this.eliteQueue.pop();
-      enemies.push(new Enemy(randEdgePos().x, randEdgePos().y, 'elite', this.wave));
+      const epos = randEdgePos();
+      enemies.push(new Enemy(epos.x, epos.y, 'elite', this.wave));
     }
 
     // Continuously spawn regular enemies
     this.spawnTimer++;
     if (this.spawnTimer >= this.spawnInterval) {
       this.spawnTimer = 0;
-      const batch = Math.min(6, 1 + Math.floor(this.wave * 0.5));
+      const batch = Math.min(4, 1 + Math.floor((this.wave - 1) / 4));
       for (let i = 0; i < batch; i++) {
         const pos = randEdgePos();
         enemies.push(new Enemy(pos.x, pos.y, this._randomType(), this.wave));
@@ -1005,7 +1012,7 @@ const Game = {
       e.update(this.player, this.enemyBullets);
       // Enemy↔player collision — damage scales 10% per wave
       if (dist(e, this.player) < e.r + this.player.r) {
-        this.player.hp -= ENEMY_DAMAGE * (1 + (this.waveManager.wave - 1) * 0.10);
+        this.player.hp -= ENEMY_DAMAGE * (1 + (this.waveManager.wave - 1) * 0.06);
       }
     }
 

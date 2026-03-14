@@ -1,7 +1,7 @@
 // ── Constants ──────────────────────────────────────────────────────────────
 let W = window.innerWidth;
 let H = window.innerHeight;
-const STATES = { MENU: 'MENU', PLAYING: 'PLAYING', GAME_OVER: 'GAME_OVER', LEVEL_UP: 'LEVEL_UP' };
+const STATES = { MENU: 'MENU', PLAYING: 'PLAYING', GAME_OVER: 'GAME_OVER', LEVEL_UP: 'LEVEL_UP', PAUSED: 'PAUSED' };
 
 const PLAYER_SPEED = 3;
 const PLAYER_MAX_HP = 100;
@@ -2449,6 +2449,11 @@ const Game = {
       return;
     }
 
+    if (this.state === STATES.PAUSED) {
+      this.drawPause();
+      return;
+    }
+
     // Between-wave banner
     if (this.waveManager.betweenWaves) {
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -3208,6 +3213,62 @@ const Game = {
     }
   },
 
+  reset() {
+    this.state = STATES.MENU;
+  },
+
+  drawPause() {
+    // Dim the frozen game world behind the panel
+    ctx.fillStyle = 'rgba(8,5,3,0.72)';
+    ctx.fillRect(0, 0, W, H);
+
+    // Panel
+    const pw = 320, ph = 220;
+    const px = W / 2 - pw / 2, py = H / 2 - ph / 2;
+    ctx.fillStyle = 'rgba(16,9,6,0.96)';
+    roundRect(ctx, px, py, pw, ph, 8); ctx.fill();
+    ctx.strokeStyle = '#3a2218'; ctx.lineWidth = 2;
+    roundRect(ctx, px, py, pw, ph, 8); ctx.stroke();
+
+    // Title
+    ctx.fillStyle = '#c8bfb0';
+    ctx.font = 'bold 36px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('PAUSED', W / 2, py + 56);
+
+    // Divider
+    ctx.strokeStyle = '#3a2218'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px + 20, py + 72); ctx.lineTo(px + pw - 20, py + 72);
+    ctx.stroke();
+
+    // Resume button
+    const rbx = W / 2 - 120, rby = py + 90, rbw = 240, rbh = 42;
+    ctx.fillStyle = '#1a3010';
+    roundRect(ctx, rbx, rby, rbw, rbh, 6); ctx.fill();
+    ctx.strokeStyle = '#3a7030'; ctx.lineWidth = 2;
+    roundRect(ctx, rbx, rby, rbw, rbh, 6); ctx.stroke();
+    ctx.fillStyle = '#a0d080';
+    ctx.font = 'bold 18px Courier New';
+    ctx.fillText('RESUME', W / 2, rby + 27);
+    this._pauseResumeBtn = { x: rbx, y: rby, w: rbw, h: rbh };
+
+    // Reset button
+    const mbx = W / 2 - 120, mby = py + 146, mbw = 240, mbh = 42;
+    ctx.fillStyle = '#7a1010';
+    roundRect(ctx, mbx, mby, mbw, mbh, 6); ctx.fill();
+    ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 2;
+    roundRect(ctx, mbx, mby, mbw, mbh, 6); ctx.stroke();
+    ctx.fillStyle = '#f5e6e0';
+    ctx.font = 'bold 18px Courier New';
+    ctx.fillText('RESET TO MENU', W / 2, mby + 27);
+    this._pauseResetBtn = { x: mbx, y: mby, w: mbw, h: mbh };
+
+    ctx.fillStyle = '#6a5a4e';
+    ctx.font = '12px Courier New';
+    ctx.fillText('ESC to resume', W / 2, py + ph - 12);
+  },
+
   handleClick(mx, my) {
     if (this.state === STATES.MENU) {
       // Weapon cards
@@ -3234,6 +3295,15 @@ const Game = {
           this.applyUpgrade(i);
         }
       });
+    } else if (this.state === STATES.PAUSED) {
+      const b = this._pauseResumeBtn;
+      if (b && mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) {
+        this.state = STATES.PLAYING;
+      }
+      const r = this._pauseResetBtn;
+      if (r && mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+        this.reset();
+      }
     }
   },
 };
@@ -3272,11 +3342,18 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-// ── Input: Enter key ───────────────────────────────────────────────────────
+// ── Input: Enter / Tab / Escape / upgrade keys ────────────────────────────
 window.addEventListener('keydown', e => {
   if (e.key === 'Enter') {
     if (Game.state === STATES.MENU || Game.state === STATES.GAME_OVER) {
       Game.start();
+    }
+  }
+  if (e.key === 'Escape') {
+    if (Game.state === STATES.PLAYING) {
+      Game.state = STATES.PAUSED;
+    } else if (Game.state === STATES.PAUSED) {
+      Game.state = STATES.PLAYING;
     }
   }
   if (e.key === 'Tab') {

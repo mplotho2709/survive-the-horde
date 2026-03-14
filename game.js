@@ -1890,6 +1890,9 @@ const Game = {
       const a = this.enemies[i];
       for (let j = i + 1; j < this.enemies.length; j++) {
         const b  = this.enemies[j];
+        // Dashing chargers phase through other enemies
+        if ((a.type === 'charger' && a.chargeState === 'dash') ||
+            (b.type === 'charger' && b.chargeState === 'dash')) continue;
         const dx = b.x - a.x, dy = b.y - a.y;
         const distSq  = dx * dx + dy * dy;
         const minDist = a.r + b.r;

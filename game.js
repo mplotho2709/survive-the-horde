@@ -1848,6 +1848,43 @@ const Game = {
       }
     }
 
+    // ── Enemy↔enemy body separation ────────────────────────────────────────
+    for (let i = 0; i < this.enemies.length; i++) {
+      const a = this.enemies[i];
+      for (let j = i + 1; j < this.enemies.length; j++) {
+        const b  = this.enemies[j];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const distSq  = dx * dx + dy * dy;
+        const minDist = a.r + b.r;
+        if (distSq < minDist * minDist && distSq > 0) {
+          const d       = Math.sqrt(distSq);
+          const overlap = minDist - d;
+          const nx = dx / d, ny = dy / d;
+          // Mass-weighted by area (r²): heavier bodies yield less
+          const ma = a.r * a.r, mb = b.r * b.r, mt = ma + mb;
+          a.x -= nx * (mb / mt) * overlap;
+          a.y -= ny * (mb / mt) * overlap;
+          b.x += nx * (ma / mt) * overlap;
+          b.y += ny * (ma / mt) * overlap;
+        }
+      }
+    }
+
+    // Boss pushes all enemies away without yielding
+    if (this.boss) {
+      for (const e of this.enemies) {
+        const dx = e.x - this.boss.x, dy = e.y - this.boss.y;
+        const distSq  = dx * dx + dy * dy;
+        const minDist = this.boss.r + e.r;
+        if (distSq < minDist * minDist && distSq > 0) {
+          const d  = Math.sqrt(distSq);
+          const nx = dx / d, ny = dy / d;
+          e.x += nx * (minDist - d);
+          e.y += ny * (minDist - d);
+        }
+      }
+    }
+
     // Update enemy bullets and check player hit
     for (const b of this.enemyBullets) {
       b.update();

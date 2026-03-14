@@ -21,6 +21,12 @@ const ENEMY_COLORS = {
 
 const GRID = 40; // background grid cell size (pixels)
 
+// Deterministic pseudo-random from integer cell coords — used for background decoration
+function _cellRand(cx, cy) {
+  const n = Math.sin(cx * 127.1 + cy * 311.7) * 43758.5453123;
+  return n - Math.floor(n);
+}
+
 // ── Leaderboard ────────────────────────────────────────────────────────────
 const Leaderboard = {
   KEY: 'sth_scores',
@@ -100,6 +106,197 @@ function randEdgePos(cx = W / 2, cy = H / 2) {
     default: return { x: cx - W / 2 - margin,           y: cy - H / 2 + Math.random() * H };
   }
 }
+
+// ── Pixel-art sprite renderer ───────────────────────────────────────────────
+function drawSprite(pixels, scale) {
+  for (const [col, row, color] of pixels) {
+    ctx.fillStyle = color;
+    ctx.fillRect(col * scale, row * scale, scale, scale);
+  }
+}
+
+// ── Player sprite definitions (8×8 grid, drawn at scale 4 = 32×32 px) ──────
+// Origin is top-left; center pixel = [4,4]. Cols 0-5 = shared body, 6+ = weapon barrel.
+const _PB = { h:'#5d4037', t:'#546e7a', s:'#ffcc80', l:'#37474f' }; // palette aliases
+const _PLAYER_BODY = [
+  // Helmet rows 0-1
+  [1,0,_PB.h],[2,0,_PB.h],[3,0,_PB.h],[4,0,_PB.h],[5,0,_PB.h],
+  [1,1,_PB.h],[2,1,_PB.h],[3,1,_PB.h],[4,1,_PB.h],[5,1,_PB.h],
+  // Torso rows 2-4, arms (skin) at col 0 & 5
+  [0,2,_PB.s],[1,2,_PB.t],[2,2,_PB.t],[3,2,_PB.t],[4,2,_PB.t],[5,2,_PB.t],
+  [0,3,_PB.t],[1,3,_PB.t],[2,3,_PB.t],[3,3,_PB.t],[4,3,_PB.t],[5,3,_PB.t],
+  [0,4,_PB.t],[1,4,_PB.t],[2,4,_PB.t],[3,4,_PB.t],[4,4,_PB.t],[5,4,_PB.t],
+  [0,5,_PB.s],[1,5,_PB.t],[2,5,_PB.t],[3,5,_PB.t],[4,5,_PB.t],[5,5,_PB.s],
+  // Legs rows 6-7
+  [1,6,_PB.l],[2,6,_PB.l],[3,6,_PB.l],[4,6,_PB.l],
+  [1,7,_PB.l],[2,7,_PB.l],[3,7,_PB.l],[4,7,_PB.l],
+];
+function _playerSprite(barrelPixels) {
+  return _PLAYER_BODY.concat(barrelPixels);
+}
+// Weapon barrel pixels at cols 6-7 (extend right, facing aim direction)
+const PLAYER_SPRITES = {
+  pistol:  _playerSprite([[6,3,'#ffe082'],[6,4,'#ffe082']]),
+  smg:     _playerSprite([[6,3,'#82e0aa'],[7,3,'#82e0aa'],[6,4,'#82e0aa'],[7,4,'#82e0aa']]),
+  shotgun: _playerSprite([[6,2,'#f0b27a'],[7,2,'#f0b27a'],[6,3,'#f0b27a'],[7,3,'#f0b27a'],
+                           [6,5,'#f0b27a'],[7,5,'#f0b27a'],[6,6,'#f0b27a'],[7,6,'#f0b27a']]),
+  sniper:  _playerSprite([[6,3,'#85c1e9'],[7,3,'#85c1e9'],[8,3,'#85c1e9'],[9,3,'#85c1e9'],
+                           [10,3,'#85c1e9'],[11,3,'#85c1e9'],[12,3,'#85c1e9'],[13,3,'#85c1e9']]),
+  cannon:  _playerSprite([[6,2,'#c39bd3'],[7,2,'#c39bd3'],[6,3,'#c39bd3'],[7,3,'#c39bd3'],
+                           [6,4,'#c39bd3'],[7,4,'#c39bd3'],[6,5,'#c39bd3'],[7,5,'#c39bd3']]),
+};
+
+// ── Zombie sprite definitions (12×12 grid, scale 3 = 36×36 px) ───────────────
+// Gruesome grey-flesh palette — no alien green
+const _ZF  = '#5c5c4e'; // rotting grey-brown flesh
+const _ZF2 = '#7a7a65'; // lighter flesh highlight
+const _ZF3 = '#3a3a2e'; // dark cavity / shadow
+const _ZRd = '#8b0000'; // dried dark blood
+const _ZRb = '#cc1a00'; // fresh bright blood
+const _ZBn = '#c8bfa0'; // exposed bone / teeth
+const _ZEr = '#ff2200'; // glowing red eye
+const _ZEd = '#160800'; // eye socket (near-black)
+const _ZDk = '#1a1a12'; // dark outline
+const _ZA  = '#b7950b'; // elite armour gold
+const _ZAh = '#d4ac0d'; // elite armour highlight
+const _ZG  = '#f1c40f'; // elite glowing eye (yellow)
+
+function _zRow(row, cols, color) {
+  return cols.map(c => [c, row, color]);
+}
+
+// Charger pixels defined separately so charger_dash can remap colours
+const _chargerPx = [
+  [2,0,_ZDk],[3,0,_ZF],[4,0,_ZF],[5,0,_ZF],[6,0,_ZF],[7,0,_ZF],[8,0,_ZDk],
+  [1,1,_ZDk],[2,1,_ZF],[3,1,_ZF3],[4,1,_ZF3],[5,1,_ZF3],[6,1,_ZF3],[7,1,_ZF],[8,1,_ZDk],
+  [1,2,_ZDk],[2,2,_ZF],[3,2,_ZEr],[4,2,_ZF3],[5,2,_ZF3],[6,2,_ZEr],[7,2,_ZF],[8,2,_ZDk],
+  [1,3,_ZDk],[2,3,_ZF],[3,3,_ZBn],[4,3,_ZBn],[5,3,_ZBn],[6,3,_ZBn],[7,3,_ZF],[8,3,_ZDk],
+  [0,4,_ZDk],[1,4,_ZF],[2,4,_ZF],[3,4,_ZF],[4,4,_ZF],[5,4,_ZF],[6,4,_ZF],[7,4,_ZF],[8,4,_ZF],[9,4,_ZF],[10,4,_ZF],[11,4,_ZDk],
+  [0,5,_ZF],[1,5,_ZF],[2,5,_ZF],[3,5,_ZF],[4,5,_ZRd],[5,5,_ZF],[6,5,_ZRd],[7,5,_ZF],[8,5,_ZF],[9,5,_ZF],[10,5,_ZF],[11,5,_ZF],
+  [0,6,_ZF],[1,6,_ZF],[2,6,_ZF3],[3,6,_ZF],[4,6,_ZF],[5,6,_ZF],[6,6,_ZF],[7,6,_ZF],[8,6,_ZF3],[9,6,_ZF],[10,6,_ZF],[11,6,_ZF],
+  [0,7,_ZDk],[1,7,_ZF],[2,7,_ZF],[3,7,_ZF],[4,7,_ZF],[5,7,_ZF],[6,7,_ZF],[7,7,_ZF],[8,7,_ZF],[9,7,_ZF],[10,7,_ZDk],
+  [1,8,_ZDk],[2,8,_ZF],[3,8,_ZF],[4,8,_ZF],[5,8,_ZF],[6,8,_ZF],[7,8,_ZF],[8,8,_ZF],[9,8,_ZDk],
+  [2,9,_ZF3],[3,9,_ZF],[7,9,_ZF],[8,9,_ZF3],
+  [2,10,_ZF3],
+];
+
+const ZOMBIE_SPRITES = {
+  // ── Slow shambler: wide hunched body, dragging leg, gut wound ──────────────
+  slow: [
+    [2,0,_ZDk],[3,0,_ZF],[4,0,_ZF],[5,0,_ZF],[6,0,_ZF],[7,0,_ZF],[8,0,_ZF],[9,0,_ZDk],
+    [1,1,_ZDk],[2,1,_ZF],[3,1,_ZF2],[4,1,_ZF2],[5,1,_ZF2],[6,1,_ZF2],[7,1,_ZF2],[8,1,_ZF],[9,1,_ZDk],
+    [1,2,_ZDk],[2,2,_ZF],[3,2,_ZEd],[4,2,_ZEr],[5,2,_ZF3],[6,2,_ZEr],[7,2,_ZEd],[8,2,_ZF],[9,2,_ZDk],
+    [1,3,_ZDk],[2,3,_ZF],[3,3,_ZBn],[4,3,_ZBn],[5,3,_ZF3],[6,3,_ZBn],[7,3,_ZBn],[8,3,_ZF],[9,3,_ZDk],
+    [0,4,_ZDk],[1,4,_ZF],[2,4,_ZF],[3,4,_ZF],[4,4,_ZF],[5,4,_ZF],[6,4,_ZF],[7,4,_ZF],[8,4,_ZF],[9,4,_ZF],[10,4,_ZDk],
+    [0,5,_ZF],[1,5,_ZF],[2,5,_ZF3],[3,5,_ZF],[4,5,_ZF],[5,5,_ZRd],[6,5,_ZF],[7,5,_ZF],[8,5,_ZF3],[9,5,_ZF],[10,5,_ZF],
+    [0,6,_ZF],[1,6,_ZF2],[2,6,_ZF],[3,6,_ZF],[4,6,_ZRb],[5,6,_ZRb],[6,6,_ZRb],[7,6,_ZF],[8,6,_ZF],[9,6,_ZF2],[10,6,_ZF],
+    [0,7,_ZDk],[1,7,_ZF],[2,7,_ZF],[3,7,_ZF],[4,7,_ZF],[5,7,_ZF],[6,7,_ZF],[7,7,_ZF],[8,7,_ZF],[9,7,_ZF],[10,7,_ZDk],
+    [1,8,_ZDk],[2,8,_ZF],[3,8,_ZF],[4,8,_ZF],[5,8,_ZF],[6,8,_ZF],[7,8,_ZF],[8,8,_ZF],[9,8,_ZDk],
+    [2,9,_ZF3],[3,9,_ZF],[7,9,_ZF],[8,9,_ZF3],
+    [2,10,_ZF3],[3,10,_ZF],
+  ],
+
+  // ── Medium: upright, arms outstretched, classic shambler ──────────────────
+  medium: [
+    [3,0,_ZDk],[4,0,_ZF],[5,0,_ZF],[6,0,_ZF],[7,0,_ZF],[8,0,_ZDk],
+    [2,1,_ZDk],[3,1,_ZF],[4,1,_ZF2],[5,1,_ZF2],[6,1,_ZF2],[7,1,_ZF],[8,1,_ZDk],
+    [2,2,_ZDk],[3,2,_ZF],[4,2,_ZEd],[5,2,_ZEr],[6,2,_ZEd],[7,2,_ZF],[8,2,_ZDk],
+    [2,3,_ZDk],[3,3,_ZF],[4,3,_ZBn],[5,3,_ZF3],[6,3,_ZBn],[7,3,_ZF],[8,3,_ZDk],
+    [1,4,_ZDk],[2,4,_ZF],[3,4,_ZF],[4,4,_ZF],[5,4,_ZF],[6,4,_ZF],[7,4,_ZF],[8,4,_ZF],[9,4,_ZDk],
+    [0,5,_ZDk],[1,5,_ZF],[2,5,_ZF],[3,5,_ZF],[4,5,_ZF],[5,5,_ZRd],[6,5,_ZF],[7,5,_ZF],[8,5,_ZF],[9,5,_ZF],[10,5,_ZDk],
+    [0,6,_ZDk],[1,6,_ZF],[2,6,_ZF3],[3,6,_ZF],[4,6,_ZRb],[5,6,_ZRb],[6,6,_ZF],[7,6,_ZF],[8,6,_ZF3],[9,6,_ZF],[10,6,_ZDk],
+    [1,7,_ZDk],[2,7,_ZF],[3,7,_ZF],[4,7,_ZF],[5,7,_ZF],[6,7,_ZF],[7,7,_ZF],[8,7,_ZF],[9,7,_ZDk],
+    [2,8,_ZDk],[3,8,_ZF],[4,8,_ZF],[5,8,_ZF],[6,8,_ZF],[7,8,_ZF],[8,8,_ZDk],
+    [3,9,_ZDk],[4,9,_ZF],[5,9,_ZF],[6,9,_ZF],[7,9,_ZDk],
+    [3,10,_ZF],[4,10,_ZF3],[6,10,_ZF3],[7,10,_ZF],
+    [3,11,_ZF],[7,11,_ZF],
+  ],
+
+  // ── Fast: lean narrow crouching runner, frantic one-eye glare ─────────────
+  fast: [
+    [4,0,_ZDk],[5,0,_ZF],[6,0,_ZF],[7,0,_ZDk],
+    [3,1,_ZDk],[4,1,_ZF],[5,1,_ZF2],[6,1,_ZF2],[7,1,_ZF],[8,1,_ZDk],
+    [3,2,_ZDk],[4,2,_ZF],[5,2,_ZEr],[6,2,_ZF3],[7,2,_ZF],[8,2,_ZDk],
+    [3,3,_ZDk],[4,3,_ZF],[5,3,_ZBn],[6,3,_ZBn],[7,3,_ZF],[8,3,_ZDk],
+    [2,4,_ZDk],[3,4,_ZF],[4,4,_ZF],[5,4,_ZF],[6,4,_ZF],[7,4,_ZF],[8,4,_ZF],[9,4,_ZDk],
+    [1,5,_ZDk],[2,5,_ZF],[3,5,_ZF],[4,5,_ZF],[5,5,_ZRb],[6,5,_ZF],[7,5,_ZF],[8,5,_ZF],[9,5,_ZF],[10,5,_ZDk],
+    [1,6,_ZDk],[2,6,_ZF],[3,6,_ZF3],[4,6,_ZF],[5,6,_ZF],[6,6,_ZF],[7,6,_ZF3],[8,6,_ZF],[9,6,_ZDk],
+    [2,7,_ZDk],[3,7,_ZF],[4,7,_ZF],[5,7,_ZF],[6,7,_ZF],[7,7,_ZF],[8,7,_ZDk],
+    [3,8,_ZDk],[4,8,_ZF],[5,8,_ZF],[6,8,_ZDk],
+    [3,9,_ZF],[4,9,_ZF3],[7,9,_ZF],
+    [3,10,_ZF],
+    [2,11,_ZF3],
+  ],
+
+  // ── Heavy: massive bloated gut-beast, wide double eyes, fat legs ──────────
+  heavy: [
+    [2,0,_ZDk],[3,0,_ZF],[4,0,_ZF],[5,0,_ZF],[6,0,_ZF],[7,0,_ZF],[8,0,_ZF],[9,0,_ZF],[10,0,_ZF],[11,0,_ZDk],
+    [1,1,_ZDk],[2,1,_ZF],[3,1,_ZF2],[4,1,_ZF2],[5,1,_ZF2],[6,1,_ZF2],[7,1,_ZF2],[8,1,_ZF2],[9,1,_ZF2],[10,1,_ZF],[11,1,_ZDk],
+    [1,2,_ZDk],[2,2,_ZF],[3,2,_ZEd],[4,2,_ZEr],[5,2,_ZF3],[6,2,_ZF3],[7,2,_ZF3],[8,2,_ZEr],[9,2,_ZEd],[10,2,_ZF],[11,2,_ZDk],
+    [1,3,_ZDk],[2,3,_ZF],[3,3,_ZBn],[4,3,_ZBn],[5,3,_ZBn],[6,3,_ZF3],[7,3,_ZBn],[8,3,_ZBn],[9,3,_ZBn],[10,3,_ZF],[11,3,_ZDk],
+    [0,4,_ZDk],[1,4,_ZF],[2,4,_ZF],[3,4,_ZF],[4,4,_ZF],[5,4,_ZF],[6,4,_ZF],[7,4,_ZF],[8,4,_ZF],[9,4,_ZF],[10,4,_ZF],[11,4,_ZF],[12,4,_ZDk],
+    [0,5,_ZF],[1,5,_ZF],[2,5,_ZF],[3,5,_ZF3],[4,5,_ZF],[5,5,_ZF],[6,5,_ZRd],[7,5,_ZRd],[8,5,_ZF],[9,5,_ZF],[10,5,_ZF3],[11,5,_ZF],[12,5,_ZF],
+    [0,6,_ZF],[1,6,_ZF],[2,6,_ZF],[3,6,_ZF],[4,6,_ZF],[5,6,_ZRb],[6,6,_ZRb],[7,6,_ZRb],[8,6,_ZF],[9,6,_ZF],[10,6,_ZF],[11,6,_ZF],[12,6,_ZF],
+    [0,7,_ZDk],[1,7,_ZF],[2,7,_ZF],[3,7,_ZF],[4,7,_ZF3],[5,7,_ZF],[6,7,_ZF],[7,7,_ZF],[8,7,_ZF3],[9,7,_ZF],[10,7,_ZF],[11,7,_ZF],[12,7,_ZDk],
+    [1,8,_ZDk],[2,8,_ZF],[3,8,_ZF],[4,8,_ZF],[5,8,_ZF],[6,8,_ZF],[7,8,_ZF],[8,8,_ZF],[9,8,_ZF],[10,8,_ZF],[11,8,_ZDk],
+    [2,9,_ZF],[3,9,_ZF],[4,9,_ZF],[8,9,_ZF],[9,9,_ZF],[10,9,_ZF],
+    [2,10,_ZF],[3,10,_ZF],[8,10,_ZF],[9,10,_ZF],
+  ],
+
+  // ── Charger / Charger-dash ────────────────────────────────────────────────
+  charger: _chargerPx,
+  charger_dash: _chargerPx.map(([c, r, col]) => {
+    const map = {
+      [_ZF]: '#7a1000', [_ZF2]: '#9a2000', [_ZF3]: '#4a0800',
+      [_ZDk]: '#1a0000', [_ZEr]: '#ff6600', [_ZBn]: '#cc8844',
+      [_ZRd]: '#ff0000', [_ZRb]: '#ff3300',
+    };
+    return [c, r, map[col] ?? col];
+  }),
+
+  // ── Shooter: upright with bone-arm extended right ─────────────────────────
+  shooter: [
+    [3,0,_ZDk],[4,0,_ZF],[5,0,_ZF],[6,0,_ZF],[7,0,_ZF],[8,0,_ZDk],
+    [2,1,_ZDk],[3,1,_ZF],[4,1,_ZF2],[5,1,_ZF2],[6,1,_ZF2],[7,1,_ZF],[8,1,_ZDk],
+    [2,2,_ZDk],[3,2,_ZF],[4,2,_ZEd],[5,2,_ZEr],[6,2,_ZEd],[7,2,_ZF],[8,2,_ZDk],
+    [2,3,_ZDk],[3,3,_ZF],[4,3,_ZBn],[5,3,_ZF3],[6,3,_ZBn],[7,3,_ZF],[8,3,_ZDk],
+    [1,4,_ZDk],[2,4,_ZF],[3,4,_ZF],[4,4,_ZF],[5,4,_ZF],[6,4,_ZF],[7,4,_ZF],[8,4,_ZF],[9,4,_ZDk],
+    [0,5,_ZDk],[1,5,_ZF],[2,5,_ZF],[3,5,_ZF],[4,5,_ZRd],[5,5,_ZF],[6,5,_ZF],[7,5,_ZF],[8,5,_ZBn],[9,5,_ZBn],[10,5,_ZBn],[11,5,_ZBn],
+    [0,6,_ZDk],[1,6,_ZF],[2,6,_ZF3],[3,6,_ZF],[4,6,_ZF],[5,6,_ZF],[6,6,_ZF],[7,6,_ZF3],[8,6,_ZBn],[9,6,_ZBn],[10,6,_ZBn],[11,6,_ZBn],
+    [1,7,_ZDk],[2,7,_ZF],[3,7,_ZF],[4,7,_ZF],[5,7,_ZF],[6,7,_ZF],[7,7,_ZF],[8,7,_ZF],[9,7,_ZDk],
+    [2,8,_ZDk],[3,8,_ZF],[4,8,_ZF],[5,8,_ZF],[6,8,_ZF],[7,8,_ZF],[8,8,_ZDk],
+    [3,9,_ZF3],[4,9,_ZF],[6,9,_ZF],[7,9,_ZF3],
+    [3,10,_ZF3],
+  ],
+
+  // ── Elite: 16×15 armoured titan, gold pauldrons, fanged maw, gore ─────────
+  elite: [
+    [0,0,_ZAh],[1,0,_ZAh],[2,0,_ZAh],[3,0,_ZA],[4,0,_ZA],[5,0,_ZA],[6,0,_ZA],[7,0,_ZA],[8,0,_ZA],[9,0,_ZA],[10,0,_ZA],[11,0,_ZA],[12,0,_ZA],[13,0,_ZAh],[14,0,_ZAh],[15,0,_ZAh],
+    [0,1,_ZAh],[1,1,_ZA],[2,1,_ZA],[3,1,_ZA],[4,1,_ZF],[5,1,_ZF],[6,1,_ZF],[7,1,_ZF],[8,1,_ZF],[9,1,_ZF],[10,1,_ZF],[11,1,_ZF],[12,1,_ZA],[13,1,_ZA],[14,1,_ZA],[15,1,_ZAh],
+    [0,2,_ZA],[1,2,_ZA],[2,2,_ZF],[3,2,_ZF],[4,2,_ZF2],[5,2,_ZF2],[6,2,_ZF2],[7,2,_ZF2],[8,2,_ZF2],[9,2,_ZF2],[10,2,_ZF2],[11,2,_ZF2],[12,2,_ZF],[13,2,_ZF],[14,2,_ZA],[15,2,_ZA],
+    [0,3,_ZA],[1,3,_ZF],[2,3,_ZF],[3,3,_ZEd],[4,3,_ZG],[5,3,_ZG],[6,3,_ZF],[7,3,_ZF],[8,3,_ZF],[9,3,_ZG],[10,3,_ZG],[11,3,_ZEd],[12,3,_ZF],[13,3,_ZF],[14,3,_ZA],
+    [0,4,_ZA],[1,4,_ZF],[2,4,_ZF],[3,4,_ZF],[4,4,_ZBn],[5,4,_ZBn],[6,4,_ZBn],[7,4,_ZF3],[8,4,_ZBn],[9,4,_ZBn],[10,4,_ZBn],[11,4,_ZF],[12,4,_ZF],[13,4,_ZF],[14,4,_ZA],
+    [0,5,_ZA],[1,5,_ZF],[2,5,_ZF],[3,5,_ZF],[4,5,_ZF],[5,5,_ZRd],[6,5,_ZF],[7,5,_ZF],[8,5,_ZF],[9,5,_ZRd],[10,5,_ZF],[11,5,_ZF],[12,5,_ZF],[13,5,_ZF],[14,5,_ZA],
+    [0,6,_ZA],[1,6,_ZF],[2,6,_ZF3],[3,6,_ZF],[4,6,_ZF],[5,6,_ZF],[6,6,_ZF],[7,6,_ZF],[8,6,_ZF],[9,6,_ZF],[10,6,_ZF],[11,6,_ZF],[12,6,_ZF3],[13,6,_ZF],[14,6,_ZA],
+    [0,7,_ZAh],[1,7,_ZA],[2,7,_ZA],[3,7,_ZF],[4,7,_ZF],[5,7,_ZRb],[6,7,_ZRb],[7,7,_ZRb],[8,7,_ZRb],[9,7,_ZRb],[10,7,_ZF],[11,7,_ZF],[12,7,_ZA],[13,7,_ZA],[14,7,_ZAh],
+    [0,8,_ZAh],[1,8,_ZAh],[2,8,_ZA],[3,8,_ZF],[4,8,_ZF],[5,8,_ZF],[6,8,_ZF],[7,8,_ZF],[8,8,_ZF],[9,8,_ZF],[10,8,_ZF],[11,8,_ZA],[12,8,_ZAh],[13,8,_ZAh],
+    [1,9,_ZA],[2,9,_ZF],[3,9,_ZF],[4,9,_ZF],[5,9,_ZF],[6,9,_ZF],[7,9,_ZF],[8,9,_ZF],[9,9,_ZF],[10,9,_ZF],[11,9,_ZF],[12,9,_ZA],
+    [1,10,_ZA],[2,10,_ZF],[3,10,_ZF],[4,10,_ZF],[5,10,_ZF],[6,10,_ZF],[7,10,_ZF],[8,10,_ZF],[9,10,_ZF],[10,10,_ZF],[11,10,_ZA],
+    [2,11,_ZA],[3,11,_ZF],[4,11,_ZF],[5,11,_ZF],[6,11,_ZF],[7,11,_ZF],[8,11,_ZF],[9,11,_ZF],[10,11,_ZA],
+    [3,12,_ZF],[4,12,_ZF],[5,12,_ZF],[9,12,_ZF],[10,12,_ZF],[11,12,_ZF],
+    [3,13,_ZF],[4,13,_ZF],[9,13,_ZF],[10,13,_ZF],
+    [3,14,_ZF],[10,14,_ZF],
+  ],
+};
+
+// Small skull sprite (5×5) for Necromancer satellites
+const SKULL_SPRITE = [
+  [1,0,'#f5f5f5'],[2,0,'#f5f5f5'],[3,0,'#f5f5f5'],
+  [0,1,'#f5f5f5'],[1,1,'#1a0a2a'],[2,1,'#f5f5f5'],[3,1,'#1a0a2a'],[4,1,'#f5f5f5'],
+  [0,2,'#f5f5f5'],[1,2,'#f5f5f5'],[2,2,'#f5f5f5'],[3,2,'#f5f5f5'],[4,2,'#f5f5f5'],
+  [1,3,'#f5f5f5'],[3,3,'#f5f5f5'],
+  [1,4,'#f5f5f5'],[3,4,'#f5f5f5'],
+];
 
 // ── Player ─────────────────────────────────────────────────────────────────
 class Player {
@@ -280,9 +477,11 @@ class Player {
       ctx.shadowBlur = 20;
       ctx.strokeStyle = '#85c1e9';
       ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, this.r + 10, 0, Math.PI * 2);
-      ctx.stroke();
+      const _sr = this.r + 10;
+      ctx.fillRect(this.x - _sr, this.y - _sr, _sr * 2, 2);
+      ctx.fillRect(this.x - _sr, this.y + _sr - 2, _sr * 2, 2);
+      ctx.fillRect(this.x - _sr, this.y - _sr, 2, _sr * 2);
+      ctx.fillRect(this.x + _sr - 2, this.y - _sr, 2, _sr * 2);
       ctx.restore();
     }
 
@@ -307,9 +506,11 @@ class Player {
       ctx.shadowBlur = 20;
       ctx.strokeStyle = '#f1c40f';
       ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, this.r + 8, 0, Math.PI * 2);
-      ctx.stroke();
+      const _lr = this.r + 8;
+      ctx.fillRect(this.x - _lr, this.y - _lr, _lr * 2, 2);
+      ctx.fillRect(this.x - _lr, this.y + _lr - 2, _lr * 2, 2);
+      ctx.fillRect(this.x - _lr, this.y - _lr, 2, _lr * 2);
+      ctx.fillRect(this.x + _lr - 2, this.y - _lr, 2, _lr * 2);
       ctx.restore();
     }
 
@@ -326,20 +527,12 @@ class Player {
       ctx.restore();
     }
 
-    // Triangle body pointing in aim direction
+    // Sprite body pointing in aim direction
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.aimAngle);
-    ctx.beginPath();
-    ctx.moveTo(this.r, 0);
-    ctx.lineTo(-this.r * 0.7, -this.r * 0.6);
-    ctx.lineTo(-this.r * 0.7,  this.r * 0.6);
-    ctx.closePath();
-    ctx.fillStyle = '#4fc3f7';
-    ctx.fill();
-    ctx.strokeStyle = '#81d4fa';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    ctx.translate(-16, -16);
+    drawSprite(PLAYER_SPRITES[this.weapon.id] || PLAYER_SPRITES.pistol, 4);
     ctx.restore();
 
     // HP bar below player
@@ -476,20 +669,11 @@ class Enemy {
 
   draw() {
     if (this.type === 'elite') {
-      // Gold body — double stroke instead of shadowBlur for performance
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
-      ctx.fillStyle = '#7d6608';
-      ctx.fill();
-      ctx.strokeStyle = '#f1c40f';
-      ctx.lineWidth = 4;
-      ctx.stroke();
-      // Outer ring for visual pop
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, this.r + 5, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(241,196,15,0.4)';
-      ctx.lineWidth = 3;
-      ctx.stroke();
+      // Elite pixel-art body (16×15 at scale 3 = 48×45 px)
+      ctx.save();
+      ctx.translate(this.x - 24, this.y - 22);
+      drawSprite(ZOMBIE_SPRITES.elite, 3);
+      ctx.restore();
 
       // Always-visible HP bar
       const bw = this.r * 2 + 20;
@@ -515,21 +699,12 @@ class Enemy {
     if (this.type === 'charger') { this._drawCharger(); return; }
     if (this.type === 'shooter') { this._drawShooter(); return; }
 
-    const colors = {
-      slow:   { fill: '#cc3333', outline: '#ff8080' },
-      medium: { fill: '#e67e22', outline: '#f0a050' },
-      fast:   { fill: '#9b59b6', outline: '#c39bd3' },
-      heavy:  { fill: '#1a5276', outline: '#2e86c1' },
-    };
-    const c = colors[this.type];
-
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
-    ctx.fillStyle = c.fill;
-    ctx.fill();
-    ctx.strokeStyle = c.outline;
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    // heavy sprite is 13 cols wide at scale 3 (39 px → offset -20); others 12 cols (36 px → -18)
+    const _hw = this.type === 'heavy' ? 20 : 18;
+    ctx.save();
+    ctx.translate(this.x - _hw, this.y - 18);
+    drawSprite(ZOMBIE_SPRITES[this.type], 3);
+    ctx.restore();
 
     // HP bar above enemy (only when damaged)
     if (this.hp < this.maxHp) {
@@ -544,18 +719,9 @@ class Enemy {
   }
 
   _drawShooter() {
-    // Teal diamond body
     ctx.save();
-    ctx.translate(this.x, this.y);
-    ctx.rotate(Math.PI / 4);
-    const s = this.r * 1.1;
-    ctx.beginPath();
-    ctx.rect(-s / 2, -s / 2, s, s);
-    ctx.fillStyle = '#117a65';
-    ctx.fill();
-    ctx.strokeStyle = '#1abc9c';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    ctx.translate(this.x - 18, this.y - 18);
+    drawSprite(ZOMBIE_SPRITES.shooter, 3);
     ctx.restore();
 
     // Muzzle flash indicator — small pulsing dot showing it can shoot
@@ -563,11 +729,12 @@ class Enemy {
       const pulse = 1 - this.shootTimer / 25;
       ctx.save();
       ctx.globalAlpha = pulse;
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, this.r + 5 + pulse * 6, 0, Math.PI * 2);
-      ctx.strokeStyle = '#e74c3c';
-      ctx.lineWidth = 2;
-      ctx.stroke();
+      const _mr = Math.round(this.r + 5 + pulse * 6);
+      ctx.fillStyle = '#e74c3c';
+      ctx.fillRect(this.x - _mr, this.y - _mr, _mr * 2, 2);
+      ctx.fillRect(this.x - _mr, this.y + _mr - 2, _mr * 2, 2);
+      ctx.fillRect(this.x - _mr, this.y - _mr, 2, _mr * 2);
+      ctx.fillRect(this.x + _mr - 2, this.y - _mr, 2, _mr * 2);
       ctx.restore();
     }
 
@@ -588,22 +755,8 @@ class Enemy {
     const isDash   = this.chargeState === 'dash';
     const isWindup = this.chargeState === 'windup';
 
-    // Body — bright red-orange during dash, thicker stroke conveys speed
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
-    ctx.fillStyle   = isDash ? '#ff4500' : '#c0392b';
-    ctx.fill();
-    ctx.strokeStyle = '#ff6b35';
-    ctx.lineWidth   = isDash ? 4 : 2;
-    ctx.stroke();
-    if (isDash) {
-      // Speed ring instead of shadowBlur
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, this.r + 6, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(255,69,0,0.35)';
-      ctx.lineWidth   = 4;
-      ctx.stroke();
-    }
+    ctx.translate(this.x - 18, this.y - 18);
+    drawSprite(isDash ? ZOMBIE_SPRITES.charger_dash : ZOMBIE_SPRITES.charger, 3);
     ctx.restore();
 
     // Windup indicator: pulsing ring + arrow pointing at locked target
@@ -614,12 +767,14 @@ class Enemy {
 
       ctx.save();
       ctx.globalAlpha = alpha;
-      // Expanding ring
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, ringR, 0, Math.PI * 2);
-      ctx.strokeStyle = '#ff4500';
-      ctx.lineWidth   = 2 + progress * 3;
-      ctx.stroke();
+      // Expanding square ring
+      ctx.fillStyle = '#ff4500';
+      const _rr = Math.round(ringR);
+      const _rw = Math.max(1, Math.round(2 + progress * 3));
+      ctx.fillRect(this.x - _rr, this.y - _rr, _rr * 2, _rw);
+      ctx.fillRect(this.x - _rr, this.y + _rr - _rw, _rr * 2, _rw);
+      ctx.fillRect(this.x - _rr, this.y - _rr, _rw, _rr * 2);
+      ctx.fillRect(this.x + _rr - _rw, this.y - _rr, _rw, _rr * 2);
 
       // Arrow showing dash direction
       const ax   = this.x + Math.cos(this.dashAngle) * (this.r + 18 + progress * 10);
@@ -712,18 +867,116 @@ class EnemyBullet {
   }
 
   draw() {
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    // 3×3 pixel cluster: center white/bright, surround dark red
+    const bx = Math.round(this.x) - 3;
+    const by = Math.round(this.y) - 3;
     ctx.fillStyle = '#c0392b';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.r * 0.4, 0, Math.PI * 2);
+    ctx.fillRect(bx,     by,     3, 3);
+    ctx.fillRect(bx + 3, by,     3, 3);
+    ctx.fillRect(bx + 6, by,     3, 3);
+    ctx.fillRect(bx,     by + 3, 3, 3);
+    ctx.fillRect(bx + 3, by + 3, 3, 3); // center (overwritten below)
+    ctx.fillRect(bx + 6, by + 3, 3, 3);
+    ctx.fillRect(bx,     by + 6, 3, 3);
+    ctx.fillRect(bx + 3, by + 6, 3, 3);
+    ctx.fillRect(bx + 6, by + 6, 3, 3);
     ctx.fillStyle = '#ff8080';
-    ctx.fill();
-    ctx.restore();
+    ctx.fillRect(bx + 3, by + 3, 3, 3); // bright center
   }
 }
+
+// ── Boss sprite definitions ──────────────────────────────────────────────────
+const _CB = '#263238'; // colossus body
+const _CM = '#37474f'; // colossus muscle ridge
+const _CE = '#85c1e9'; // colossus eye
+const _NB = '#4a1a6a'; // necromancer robe
+const _NS = '#f5f5f5'; // necromancer skull
+const _BB = '#7b1a1a'; // berserker body
+const _BE = '#e74c3c'; // berserker accent
+
+function _bossRow(row, totalCols, color) {
+  return Array.from({length: totalCols}, (_, c) => [c, row, color]);
+}
+
+const BOSS_SPRITES = {
+  // Colossus: 12×12, scale 4 → 48×48 px
+  colossus: [
+    ..._bossRow(0,12,_CM),
+    ..._bossRow(1,12,_CB), [0,1,_CM],[11,1,_CM],
+    ..._bossRow(2,12,_CM),
+    ..._bossRow(3,12,_CB), [0,3,_CM],[11,3,_CM],
+    ..._bossRow(4,12,_CM),
+    // Eyes on row 5
+    ..._bossRow(5,12,_CB), [4,5,_CE],[5,5,_CE],[6,5,_CE],[7,5,_CE],
+    ..._bossRow(6,12,_CM),
+    ..._bossRow(7,12,_CB), [0,7,_CM],[11,7,_CM],
+    ..._bossRow(8,12,_CM),
+    ..._bossRow(9,12,_CB), [0,9,_CM],[11,9,_CM],
+    ..._bossRow(10,12,_CM),
+    ..._bossRow(11,12,_CB),
+  ],
+  colossus_charge: [
+    ..._bossRow(0,12,'#5d1a1a'),
+    ..._bossRow(1,12,'#8b0000'), [0,1,'#5d1a1a'],[11,1,'#5d1a1a'],
+    ..._bossRow(2,12,'#5d1a1a'),
+    ..._bossRow(3,12,'#8b0000'), [0,3,'#5d1a1a'],[11,3,'#5d1a1a'],
+    ..._bossRow(4,12,'#5d1a1a'),
+    ..._bossRow(5,12,'#8b0000'), [4,5,_CE],[5,5,_CE],[6,5,_CE],[7,5,_CE],
+    ..._bossRow(6,12,'#5d1a1a'),
+    ..._bossRow(7,12,'#8b0000'), [0,7,'#5d1a1a'],[11,7,'#5d1a1a'],
+    ..._bossRow(8,12,'#5d1a1a'),
+    ..._bossRow(9,12,'#8b0000'), [0,9,'#5d1a1a'],[11,9,'#5d1a1a'],
+    ..._bossRow(10,12,'#5d1a1a'),
+    ..._bossRow(11,12,'#8b0000'),
+  ],
+  // Necromancer: 10×12, scale 3 → 30×36 px
+  necromancer: [
+    // Skull head rows 0-3
+    ...[3,4,5,6].map(c => [c,0,_NS]),
+    ...[2,3,4,5,6,7].map(c => [c,1,_NS]),
+    [2,2,_NS],[3,2,'#1a0a2a'],[4,2,_NS],[5,2,_NS],[6,2,'#1a0a2a'],[7,2,_NS],
+    ...[2,3,4,5,6,7].map(c => [c,3,_NS]),
+    [3,4,_NS],[6,4,_NS],
+    // Robe rows 5-11
+    ...[3,4,5,6].map(c => [c,5,_NB]),
+    ...[2,3,4,5,6,7].map(c => [c,6,_NB]),
+    ...[1,2,3,4,5,6,7,8].map(c => [c,7,_NB]),
+    ...[1,2,3,4,5,6,7,8].map(c => [c,8,_NB]),
+    ...[0,1,2,3,4,5,6,7,8,9].map(c => [c,9,_NB]),
+    ...[0,1,2,3,4,5,6,7,8,9].map(c => [c,10,_NB]),
+    ...[1,2,3,4,5,6,7,8].map(c => [c,11,_NB]),
+  ],
+  // Berserker: 12×12, scale 3 → 36×36 px
+  berserker: [
+    // Spiky edges on corners/edges
+    [2,0,_BB],[3,0,_BB],[8,0,_BB],[9,0,_BB],
+    [1,1,_BB],[2,1,_BB],[3,1,_BB],[4,1,_BB],[7,1,_BB],[8,1,_BB],[9,1,_BB],[10,1,_BB],
+    [0,2,_BB],[1,2,_BB],[2,2,_BB],[3,2,_BB],[4,2,_BB],[5,2,_BB],[6,2,_BB],[7,2,_BB],[8,2,_BB],[9,2,_BB],[10,2,_BB],[11,2,_BB],
+    ..._bossRow(3,12,_BB),
+    ..._bossRow(4,12,_BB),
+    ..._bossRow(5,12,_BB), [4,5,_BE],[5,5,_BE],[6,5,_BE],[7,5,_BE],
+    ..._bossRow(6,12,_BB), [4,6,_BE],[5,6,_BE],[6,6,_BE],[7,6,_BE],
+    ..._bossRow(7,12,_BB),
+    ..._bossRow(8,12,_BB),
+    [0,9,_BB],[1,9,_BB],[2,9,_BB],[3,9,_BB],[4,9,_BB],[5,9,_BB],[6,9,_BB],[7,9,_BB],[8,9,_BB],[9,9,_BB],[10,9,_BB],[11,9,_BB],
+    [1,10,_BB],[2,10,_BB],[3,10,_BB],[4,10,_BB],[7,10,_BB],[8,10,_BB],[9,10,_BB],[10,10,_BB],
+    [2,11,_BB],[3,11,_BB],[8,11,_BB],[9,11,_BB],
+  ],
+  berserker_enraged: [
+    [2,0,'#c0392b'],[3,0,'#c0392b'],[8,0,'#c0392b'],[9,0,'#c0392b'],
+    [1,1,'#c0392b'],[2,1,'#c0392b'],[3,1,'#c0392b'],[4,1,'#c0392b'],[7,1,'#c0392b'],[8,1,'#c0392b'],[9,1,'#c0392b'],[10,1,'#c0392b'],
+    [0,2,'#c0392b'],[1,2,'#c0392b'],[2,2,'#c0392b'],[3,2,'#c0392b'],[4,2,'#c0392b'],[5,2,'#c0392b'],[6,2,'#c0392b'],[7,2,'#c0392b'],[8,2,'#c0392b'],[9,2,'#c0392b'],[10,2,'#c0392b'],[11,2,'#c0392b'],
+    ..._bossRow(3,12,'#c0392b'),
+    ..._bossRow(4,12,'#c0392b'),
+    ..._bossRow(5,12,'#c0392b'), [4,5,'#f1c40f'],[5,5,'#f1c40f'],[6,5,'#f1c40f'],[7,5,'#f1c40f'],
+    ..._bossRow(6,12,'#c0392b'), [4,6,'#f1c40f'],[5,6,'#f1c40f'],[6,6,'#f1c40f'],[7,6,'#f1c40f'],
+    ..._bossRow(7,12,'#c0392b'),
+    ..._bossRow(8,12,'#c0392b'),
+    [0,9,'#c0392b'],[1,9,'#c0392b'],[2,9,'#c0392b'],[3,9,'#c0392b'],[4,9,'#c0392b'],[5,9,'#c0392b'],[6,9,'#c0392b'],[7,9,'#c0392b'],[8,9,'#c0392b'],[9,9,'#c0392b'],[10,9,'#c0392b'],[11,9,'#c0392b'],
+    [1,10,'#c0392b'],[2,10,'#c0392b'],[3,10,'#c0392b'],[4,10,'#c0392b'],[7,10,'#c0392b'],[8,10,'#c0392b'],[9,10,'#c0392b'],[10,10,'#c0392b'],
+    [2,11,'#c0392b'],[3,11,'#c0392b'],[8,11,'#c0392b'],[9,11,'#c0392b'],
+  ],
+};
 
 // ── Boss ────────────────────────────────────────────────────────────────────
 const BOSS_TYPES = ['colossus', 'necromancer', 'berserker'];
@@ -899,15 +1152,17 @@ class Boss {
     if (this.type === 'necromancer') this._drawNecromancer();
     if (this.type === 'berserker')   this._drawBerserker();
 
-    // Shockwave ring (Colossus)
+    // Shockwave square ring (Colossus)
     if (this.shockwave) {
       const sw = this.shockwave;
       ctx.globalAlpha = (sw.life / sw.maxLife) * 0.85;
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, sw.r, 0, Math.PI * 2);
-      ctx.strokeStyle = '#aed6f1';
-      ctx.lineWidth = 8 * (sw.life / sw.maxLife);
-      ctx.stroke();
+      ctx.fillStyle = '#aed6f1';
+      const _sw = Math.round(sw.r);
+      const _sl = Math.max(1, Math.round(8 * (sw.life / sw.maxLife)));
+      ctx.fillRect(this.x - _sw, this.y - _sw, _sw * 2, _sl);
+      ctx.fillRect(this.x - _sw, this.y + _sw - _sl, _sw * 2, _sl);
+      ctx.fillRect(this.x - _sw, this.y - _sw, _sl, _sw * 2);
+      ctx.fillRect(this.x + _sw - _sl, this.y - _sw, _sl, _sw * 2);
       ctx.globalAlpha = 1;
     }
 
@@ -937,32 +1192,11 @@ class Boss {
     const charging = this.chargeState === 'dash';
     const windup   = this.chargeState === 'windup';
 
-    ctx.shadowColor = charging ? '#e74c3c' : this.accent;
-    ctx.shadowBlur  = 18 + Math.sin(this.pulse) * 7;
-
-    // Outer body
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
-    ctx.fillStyle = charging ? '#5d1a1a' : this.color;
-    ctx.fill();
-    ctx.strokeStyle = this.accent;
-    ctx.lineWidth = 3.5;
-    ctx.stroke();
-
-    ctx.shadowBlur = 0;
-
-    // Middle ring
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.r * 0.65, 0, Math.PI * 2);
-    ctx.strokeStyle = charging ? '#e74c3c' : '#2e6a8e';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // Core
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.r * 0.28, 0, Math.PI * 2);
-    ctx.fillStyle = this.accent;
-    ctx.fill();
+    // Pixel-art body (12×12, scale 4 → 48×48 px; center at -24,-24)
+    ctx.save();
+    ctx.translate(this.x - 24, this.y - 24);
+    drawSprite(charging ? BOSS_SPRITES.colossus_charge : BOSS_SPRITES.colossus, 4);
+    ctx.restore();
 
     // Windup arrow
     if (windup) {
@@ -981,36 +1215,21 @@ class Boss {
   }
 
   _drawNecromancer() {
-    ctx.shadowColor = this.accent;
-    ctx.shadowBlur  = 14 + Math.sin(this.pulse) * 5;
+    // Pixel-art body (10×12, scale 3 → 30×36 px; center at -15,-18)
+    ctx.save();
+    ctx.translate(this.x - 15, this.y - 18);
+    drawSprite(BOSS_SPRITES.necromancer, 3);
+    ctx.restore();
 
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
-    ctx.fillStyle = this.color;
-    ctx.fill();
-    ctx.strokeStyle = this.accent;
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-
-    ctx.shadowBlur = 0;
-
-    // Inner sigil
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.r * 0.38, 0, Math.PI * 2);
-    ctx.fillStyle = this.accent;
-    ctx.globalAlpha = 0.7;
-    ctx.fill();
-    ctx.globalAlpha = 1;
-
-    // 3 orbiting satellites
+    // 3 orbiting skull satellites
     for (let i = 0; i < 3; i++) {
       const a  = this.orbitAngle + (Math.PI * 2 * i) / 3;
       const ox = this.x + Math.cos(a) * (this.r + 14);
       const oy = this.y + Math.sin(a) * (this.r + 14);
-      ctx.beginPath();
-      ctx.arc(ox, oy, 5, 0, Math.PI * 2);
-      ctx.fillStyle = this.accent;
-      ctx.fill();
+      ctx.save();
+      ctx.translate(ox - 2, oy - 2);
+      drawSprite(SKULL_SPRITE, 1);
+      ctx.restore();
     }
   }
 
@@ -1018,33 +1237,11 @@ class Boss {
     const enraged   = this.enraged;
     const glowColor = enraged ? '#f39c12' : this.accent;
 
-    ctx.shadowColor = glowColor;
-    ctx.shadowBlur  = enraged ? 28 + Math.abs(Math.sin(this.pulse * 3)) * 14 : 12;
-
-    // 7-point star polygon
-    const pts = 7, outer = this.r, inner = this.r * 0.52;
-    ctx.beginPath();
-    for (let i = 0; i < pts * 2; i++) {
-      const a   = (Math.PI * 2 * i) / (pts * 2) - Math.PI / 2 + this.pulse * 0.25;
-      const rad = i % 2 === 0 ? outer : inner;
-      const px  = this.x + Math.cos(a) * rad;
-      const py  = this.y + Math.sin(a) * rad;
-      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
-    }
-    ctx.closePath();
-    ctx.fillStyle = enraged ? '#c0392b' : this.color;
-    ctx.fill();
-    ctx.strokeStyle = glowColor;
-    ctx.lineWidth   = 2;
-    ctx.stroke();
-
-    ctx.shadowBlur = 0;
-
-    // Core
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.r * 0.28, 0, Math.PI * 2);
-    ctx.fillStyle = enraged ? '#f1c40f' : '#e74c3c';
-    ctx.fill();
+    // Pixel-art body (12×12, scale 3 → 36×36 px; center at -18,-18)
+    ctx.save();
+    ctx.translate(this.x - 18, this.y - 18);
+    drawSprite(enraged ? BOSS_SPRITES.berserker_enraged : BOSS_SPRITES.berserker, 3);
+    ctx.restore();
   }
 }
 
@@ -1087,32 +1284,30 @@ class Powerup {
   draw() {
     const cfg = POWERUP_CONFIG[this.type];
     const p   = Math.sin(this.pulse) * 0.5 + 0.5;
-    const r   = this.r + p * 3;
     const alpha = this.lifetime < 180 ? this.lifetime / 180 : 1;
+    const sc = 2, sz = 10;
+    const bx = Math.round(this.x) - sz * sc / 2;
+    const by = Math.round(this.y) - sz * sc / 2;
 
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.shadowColor = cfg.glow;
-    ctx.shadowBlur  = 10 + p * 8;
 
-    // Pentagon body
-    ctx.beginPath();
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
-      i === 0 ? ctx.moveTo(this.x + Math.cos(a) * r, this.y + Math.sin(a) * r)
-              : ctx.lineTo(this.x + Math.cos(a) * r, this.y + Math.sin(a) * r);
-    }
-    ctx.closePath();
-    ctx.fillStyle = cfg.color + '55';
-    ctx.fill();
-    ctx.strokeStyle = cfg.color;
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    // Dark interior fill
+    ctx.fillStyle = '#120d0a';
+    ctx.fillRect(bx + sc, by + sc, (sz - 2) * sc, (sz - 2) * sc);
+
+    // Colored pulsing border
+    ctx.fillStyle = cfg.color;
+    ctx.globalAlpha = alpha * (0.5 + p * 0.5);
+    ctx.fillRect(bx,               by,               sz * sc, sc);
+    ctx.fillRect(bx,               by + (sz-1) * sc, sz * sc, sc);
+    ctx.fillRect(bx,               by + sc,          sc, (sz-2) * sc);
+    ctx.fillRect(bx + (sz-1) * sc, by + sc,          sc, (sz-2) * sc);
 
     // Icon
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = '#fff';
-    ctx.font = `${11 + p * 2}px Courier New`;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#e8d8c0';
+    ctx.font = `${10 + Math.round(p * 2)}px Courier New`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(cfg.icon, this.x, this.y);
@@ -1121,7 +1316,7 @@ class Powerup {
     // Label
     ctx.fillStyle = cfg.color;
     ctx.font = 'bold 9px Courier New';
-    ctx.fillText(cfg.label, this.x, this.y - r - 6);
+    ctx.fillText(cfg.label, this.x, this.y - sz * sc / 2 - 5);
     ctx.restore();
   }
 }
@@ -1421,6 +1616,28 @@ const ITEMS = [
 ];
 
 // ── Chest (rare floor drop) ─────────────────────────────────────────────────
+const CHEST_SPRITE = (() => {
+  const iron = '#242420', ironH = '#3a3a34';
+  const w1 = '#2c3818', w2 = '#3d4f20';
+  const rust = '#4a2810', blood = '#580606';
+  const brass = '#7a5c0c', brassH = '#a07c10';
+  const px = [];
+  for (let r = 0; r < 10; r++) {
+    for (let c = 0; c < 14; c++) {
+      let col;
+      if (r === 0 || r === 5 || r === 9) col = iron;
+      else if (c === 4 || c === 5 || c === 10 || c === 11) col = r % 2 === 0 ? ironH : iron;
+      else if (r === 6 && (c === 6 || c === 7)) col = brassH;
+      else if (r === 7 && (c === 6 || c === 7)) col = brass;
+      else if (r === 2 && c >= 1 && c <= 2) col = blood;
+      else if (r === 4 && c === 12) col = rust;
+      else col = (r + c) % 2 === 0 ? w1 : w2;
+      px.push([c, r, col]);
+    }
+  }
+  return px;
+})();
+
 class Chest {
   constructor(x, y) {
     this.x = x; this.y = y; this.r = 14;
@@ -1432,37 +1649,21 @@ class Chest {
   draw() {
     const p    = Math.sin(this.pulse) * 0.5 + 0.5;
     const fade = this.lifetime < 180 ? this.lifetime / 180 : 1;
-    const w = 26, h = 20;
 
     ctx.save();
     ctx.globalAlpha = fade;
-    ctx.shadowColor = '#f1c40f';
-    ctx.shadowBlur  = 10 + p * 10;
 
-    // Body
-    ctx.fillStyle = '#7d6608';
-    roundRect(ctx, this.x - w / 2, this.y - h / 2 + 4, w, h - 4, 3);
-    ctx.fill();
-    // Lid
-    ctx.fillStyle = '#9a7d0a';
-    roundRect(ctx, this.x - w / 2, this.y - h / 2, w, 8, 3);
-    ctx.fill();
-    // Gold trim
-    ctx.strokeStyle = '#f1c40f';
-    ctx.lineWidth = 1.5;
-    roundRect(ctx, this.x - w / 2, this.y - h / 2, w, h, 3);
-    ctx.stroke();
-    // Latch
-    ctx.beginPath();
-    ctx.arc(this.x, this.y + 4, 3, 0, Math.PI * 2);
-    ctx.fillStyle = '#f1c40f';
-    ctx.fill();
+    // Supply crate sprite: 14×10 at scale 2 = 28×20px, centered
+    ctx.save();
+    ctx.translate(Math.round(this.x) - 14, Math.round(this.y) - 10);
+    drawSprite(CHEST_SPRITE, 2);
+    ctx.restore();
 
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = '#f1c40f';
+    // Label
+    ctx.fillStyle = `rgba(160,180,80,${0.7 + p * 0.3})`;
     ctx.font = 'bold 9px Courier New';
     ctx.textAlign = 'center';
-    ctx.fillText('CHEST', this.x, this.y - h / 2 - 5);
+    ctx.fillText('CACHE', this.x, this.y - 15);
     ctx.restore();
   }
 }
@@ -1492,10 +1693,9 @@ class Particle {
 
   draw() {
     ctx.globalAlpha = this.life / this.maxLife;
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    const s = Math.ceil(this.r);
     ctx.fillStyle = this.color;
-    ctx.fill();
+    ctx.fillRect(Math.round(this.x) - s, Math.round(this.y) - s, s * 2, s * 2);
     ctx.globalAlpha = 1;
   }
 }
@@ -1521,19 +1721,17 @@ class XpOrb {
     const alpha = this.lifetime < 180 ? this.lifetime / 180 : 1;
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, 5, 0, Math.PI * 2);
+    // 10×10 pixel orb (scale 2): ring = this.color, center = white
+    const ox = Math.round(this.x) - 5;
+    const oy = Math.round(this.y) - 5;
     ctx.fillStyle = this.color;
-    ctx.fill();
-    ctx.strokeStyle = this.glow;
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    // White center dot
-    ctx.shadowBlur = 0;
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, 2, 0, Math.PI * 2);
-    ctx.fillStyle = '#fff';
-    ctx.fill();
+    ctx.fillRect(ox + 2, oy,     6, 2);
+    ctx.fillRect(ox,     oy + 2, 2, 6);
+    ctx.fillRect(ox + 8, oy + 2, 2, 6);
+    ctx.fillRect(ox + 2, oy + 8, 6, 2);
+    ctx.fillRect(ox + 2, oy + 2, 6, 6);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(ox + 4, oy + 4, 2, 2);
     ctx.restore();
   }
 }
@@ -2140,19 +2338,80 @@ const Game = {
   },
 
   draw() {
-    // ── Screen-space background (scrolling infinite grid) ──────────────────
-    ctx.fillStyle = '#0d0d18';
+    // ── Screen-space background — post-apocalyptic wasteland ───────────────
+    ctx.fillStyle = '#100d0b'; // ashen near-black ground
     ctx.fillRect(0, 0, W, H);
 
     if (this.state === STATES.MENU) { this.drawMenu(); return; }
     if (this.state === STATES.GAME_OVER) { this.drawGameOver(); return; }
 
-    // Scrolling grid — offset by camera so it tiles infinitely
+    // Camera
     const camX = this.player.x - W / 2;
     const camY = this.player.y - H / 2;
+
+    // Iterate visible ground tiles — add shade variation, blood pools, rubble
+    const startCX = Math.floor(camX / GRID) - 1;
+    const startCY = Math.floor(camY / GRID) - 1;
+    const endCX   = Math.ceil((camX + W) / GRID) + 1;
+    const endCY   = Math.ceil((camY + H) / GRID) + 1;
+
+    for (let cx = startCX; cx <= endCX; cx++) {
+      for (let cy = startCY; cy <= endCY; cy++) {
+        const sx = cx * GRID - camX;
+        const sy = cy * GRID - camY;
+        // Four independent pseudo-random values per cell
+        const r1 = _cellRand(cx, cy);
+        const r2 = _cellRand(cx + 1000, cy + 500);
+        const r3 = _cellRand(cx - 700, cy + 1200);
+        const r4 = _cellRand(cx * 3, cy * 7 + 400);
+
+        // Subtle tile shade: worn concrete (lighter) or shadow pit (darker)
+        if (r1 < 0.13) {
+          ctx.fillStyle = 'rgba(30,23,16,0.75)';
+          ctx.fillRect(sx, sy, GRID, GRID);
+        } else if (r1 < 0.25) {
+          ctx.fillStyle = 'rgba(6,4,3,0.55)';
+          ctx.fillRect(sx, sy, GRID, GRID);
+        }
+
+        // Blood pool (~7% of tiles) — irregular dark-crimson splotch
+        if (r2 < 0.07) {
+          const bx = sx + 3 + Math.floor(r1 * (GRID - 20));
+          const by = sy + 3 + Math.floor(r3 * (GRID - 14));
+          ctx.fillStyle = 'rgba(100,4,4,0.72)';
+          ctx.fillRect(bx,     by,     16, 8);
+          ctx.fillStyle = 'rgba(65,2,2,0.58)';
+          ctx.fillRect(bx + 5, by + 6, 12, 5);
+          ctx.fillRect(bx - 3, by + 3,  7, 4);
+          ctx.fillRect(bx + 12, by - 2, 5, 4);
+        }
+
+        // Rubble / debris chunks (~10% of tiles, non-blood cells)
+        if (r3 < 0.10 && r2 >= 0.07) {
+          const rx = sx + 2 + Math.floor(r4 * (GRID - 12));
+          const ry = sy + 2 + Math.floor(r1 * (GRID - 12));
+          ctx.fillStyle = 'rgba(54,48,40,0.90)';
+          ctx.fillRect(rx,     ry,     5, 4);
+          ctx.fillRect(rx + 8, ry + 2, 4, 3);
+          ctx.fillStyle = 'rgba(36,30,24,0.75)';
+          ctx.fillRect(rx + 2, ry + 5, 3, 2);
+          ctx.fillRect(rx + 6, ry - 1, 2, 3);
+        }
+
+        // Sparse dark stain (~4% of tiles) — smeared grime
+        if (r4 < 0.04) {
+          const gx = sx + Math.floor(r2 * (GRID - 14));
+          const gy = sy + Math.floor(r1 * (GRID - 8));
+          ctx.fillStyle = 'rgba(20,14,10,0.55)';
+          ctx.fillRect(gx, gy, 14, 6);
+        }
+      }
+    }
+
+    // Cracked-pavement grid lines — dark warm brown, not bright white
     const offX = ((camX % GRID) + GRID) % GRID;
     const offY = ((camY % GRID) + GRID) % GRID;
-    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    ctx.strokeStyle = 'rgba(58,40,24,0.55)';
     ctx.lineWidth = 1;
     for (let x = -offX; x <= W + GRID; x += GRID) {
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
@@ -2258,7 +2517,7 @@ const Game = {
     ctx.fillText(`Lvl: ${this.player.level}`, W - 14, 46);
 
     // Stats hint
-    ctx.fillStyle = '#555';
+    ctx.fillStyle = '#5a4a3e';
     ctx.font = '11px Courier New';
     ctx.fillText('[Tab] Stats', W - 14, H - 10);
 
@@ -2266,17 +2525,17 @@ const Game = {
     const bw = 200, bh = 14;
     const bx = W / 2 - bw / 2;
     const by = 10;
-    ctx.fillStyle = '#1a1a2e';
+    ctx.fillStyle = '#1a0e08';
     ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
-    ctx.fillStyle = '#333';
+    ctx.fillStyle = '#2a1810';
     ctx.fillRect(bx, by, bw, bh);
     const hpRatio = this.player.hp / this.player.maxHp;
     ctx.fillStyle = hpRatio > 0.5 ? '#2ecc71' : hpRatio > 0.25 ? '#f39c12' : '#e74c3c';
     ctx.fillRect(bx, by, bw * hpRatio, bh);
-    ctx.strokeStyle = '#555';
+    ctx.strokeStyle = '#3a2218';
     ctx.lineWidth = 1;
     ctx.strokeRect(bx, by, bw, bh);
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = '#e8d8cc';
     ctx.font = '11px Courier New';
     ctx.textAlign = 'center';
     ctx.fillText(`HP  ${Math.ceil(this.player.hp)} / ${this.player.maxHp}`, W / 2, by + 10);
@@ -2284,17 +2543,17 @@ const Game = {
     // XP bar (just below HP bar)
     const xby = by + bh + 4;
     const xbh = 8;
-    ctx.fillStyle = '#1a1a2e';
+    ctx.fillStyle = '#1a0e08';
     ctx.fillRect(bx - 1, xby - 1, bw + 2, xbh + 2);
-    ctx.fillStyle = '#333';
+    ctx.fillStyle = '#2a1810';
     ctx.fillRect(bx, xby, bw, xbh);
     const xpRatio = this.player.xp / this.player.xpToNext;
-    ctx.fillStyle = '#9b59b6';
+    ctx.fillStyle = '#7a3a8a';
     ctx.fillRect(bx, xby, bw * xpRatio, xbh);
-    ctx.strokeStyle = '#555';
+    ctx.strokeStyle = '#3a2218';
     ctx.lineWidth = 1;
     ctx.strokeRect(bx, xby, bw, xbh);
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = '#c8bfb0';
     ctx.font = '9px Courier New';
     ctx.textAlign = 'left';
     ctx.fillText(`LVL ${this.player.level}`, bx + 3, xby + 7);
@@ -2312,7 +2571,7 @@ const Game = {
         const cfg = POWERUP_CONFIG[type];
         const ratio = timer / cfg.duration;
         // Box
-        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillStyle = 'rgba(14,8,5,0.88)';
         roundRect(ctx, ix, iy, iconW, iconH, 4); ctx.fill();
         ctx.strokeStyle = cfg.color;
         ctx.lineWidth = 1.5;
@@ -2325,7 +2584,7 @@ const Game = {
         ctx.font = '8px Courier New';
         ctx.fillText(cfg.label, ix + iconW / 2, iy + 28);
         // Timer bar
-        ctx.fillStyle = '#333';
+        ctx.fillStyle = '#2a1810';
         ctx.fillRect(ix + 4, iy + iconH - 7, iconW - 8, 4);
         ctx.fillStyle = cfg.color;
         ctx.fillRect(ix + 4, iy + iconH - 7, (iconW - 8) * ratio, 4);
@@ -2365,10 +2624,10 @@ const Game = {
     const py = H / 2 - panelH / 2;
 
     // Background
-    ctx.fillStyle = 'rgba(10,10,24,0.88)';
+    ctx.fillStyle = 'rgba(16,9,6,0.92)';
     roundRect(ctx, px, py, pw, panelH, 8);
     ctx.fill();
-    ctx.strokeStyle = '#444';
+    ctx.strokeStyle = '#3a2218';
     ctx.lineWidth = 1;
     roundRect(ctx, px, py, pw, panelH, 8);
     ctx.stroke();
@@ -2384,21 +2643,21 @@ const Game = {
     ctx.font = '12px Courier New';
     for (const row of rows) {
       if (row === null) { ry += rowH * 0.4; continue; }
-      ctx.fillStyle = '#7f8c8d';
+      ctx.fillStyle = '#7a6a5c';
       ctx.textAlign = 'left';
       ctx.fillText(row.label, px + pad, ry);
       if (row.max !== undefined) {
         // Draw " / max" in gray, right-aligned
         const maxPart = ` / ${row.max}`;
-        ctx.fillStyle = '#7f8c8d';
+        ctx.fillStyle = '#7a6a5c';
         ctx.textAlign = 'right';
         ctx.fillText(maxPart, px + pw - pad, ry);
         // Draw current value to the left of it
         const maxPartW = ctx.measureText(maxPart).width;
-        ctx.fillStyle = row.maxed ? '#f1c40f' : '#ecf0f1';
+        ctx.fillStyle = row.maxed ? '#f1c40f' : '#c8bfb0';
         ctx.fillText(String(row.value), px + pw - pad - maxPartW, ry);
       } else {
-        ctx.fillStyle = '#ecf0f1';
+        ctx.fillStyle = '#c8bfb0';
         ctx.textAlign = 'right';
         ctx.fillText(String(row.value), px + pw - pad, ry);
       }
@@ -2407,8 +2666,8 @@ const Game = {
   },
 
   drawLevelUp() {
-    // Dim background
-    ctx.fillStyle = 'rgba(0,0,0,0.72)';
+    // Dark blood-tinged overlay
+    ctx.fillStyle = 'rgba(6,3,2,0.80)';
     ctx.fillRect(0, 0, W, H);
 
     // Title
@@ -2428,7 +2687,7 @@ const Game = {
     ctx.fillText(titleText, W / 2, 130);
     ctx.shadowBlur = 0;
 
-    ctx.fillStyle = '#bdc3c7';
+    ctx.fillStyle = '#8a7a6c';
     ctx.font = '15px Courier New';
     ctx.fillText('Choose an upgrade  (click or press 1 / 2 / 3)', W / 2, 162);
 
@@ -2445,8 +2704,8 @@ const Game = {
         ? (upg.rarity === 'legendary' ? 22 : upg.rarity === 'rare' ? 14 : upg.rarity === 'uncommon' ? 8 : 0)
         : (upg.rarityKey === 'rare' ? 16 : upg.rarityKey === 'uncommon' ? 8 : 0);
 
-      // Card background
-      ctx.fillStyle = '#1a1a2e';
+      // Card background — dark charred wood / dried blood
+      ctx.fillStyle = '#18100d';
       roundRect(ctx, cx, cardY, cardW, cardH, 10);
       ctx.fill();
 
@@ -2466,7 +2725,7 @@ const Game = {
       ctx.fillText(upg._isItem ? ITEM_RARITY[upg.rarity].label.toUpperCase() : upg.rarityLabel.toUpperCase(), cx + cardW - 10, cardY + 18);
 
       // Number badge (top-left)
-      ctx.fillStyle = '#ecf0f1';
+      ctx.fillStyle = '#c8bfb0';
       ctx.textAlign = 'left';
       ctx.fillText(`[${i + 1}]`, cx + 10, cardY + 18);
 
@@ -2481,7 +2740,7 @@ const Game = {
       ctx.fillText(upg.name, cx + cardW / 2, cardY + 112);
 
       // Desc
-      ctx.fillStyle = '#bdc3c7';
+      ctx.fillStyle = '#a09080';
       ctx.font = '12px Courier New';
       wrapText(upg.desc, cx + cardW / 2, cardY + 133, cardW - 20, 16);
 
@@ -2514,10 +2773,10 @@ const Game = {
     const panelH = titleH + visible.length * rowH + pad;
 
     // Background
-    ctx.fillStyle = 'rgba(10,10,24,0.88)';
+    ctx.fillStyle = 'rgba(16,9,6,0.92)';
     roundRect(ctx, px, py, pw, panelH, 8);
     ctx.fill();
-    ctx.strokeStyle = '#3a3a5a';
+    ctx.strokeStyle = '#3a2218';
     ctx.lineWidth = 1;
     roundRect(ctx, px, py, pw, panelH, 8);
     ctx.stroke();
@@ -2529,7 +2788,7 @@ const Game = {
     ctx.fillText('PICKED UPGRADES', px + pw / 2, py + 17);
 
     // Divider
-    ctx.strokeStyle = '#333';
+    ctx.strokeStyle = '#3a2218';
     ctx.beginPath();
     ctx.moveTo(px + pad, py + titleH - 2);
     ctx.lineTo(px + pw - pad, py + titleH - 2);
@@ -2548,14 +2807,14 @@ const Game = {
 
       // Row hover highlight
       if (hovered) {
-        ctx.fillStyle = 'rgba(255,255,255,0.07)';
+        ctx.fillStyle = 'rgba(180,30,10,0.12)';
         ctx.fillRect(px + 2, rowTop, pw - 4, rowH);
       }
 
       // Icon
       ctx.font = '13px Courier New';
       ctx.textAlign = 'left';
-      ctx.fillStyle = '#ecf0f1';
+      ctx.fillStyle = '#c8bfb0';
       ctx.fillText(entry.icon, px + 8, ry);
 
       // Name (truncate if too long)
@@ -2596,7 +2855,7 @@ const Game = {
     const ty = Math.max(4, Math.min(H - th - 4, centerY - th / 2));
 
     // Background + border
-    ctx.fillStyle = 'rgba(8,8,20,0.97)';
+    ctx.fillStyle = 'rgba(12,6,4,0.97)';
     roundRect(ctx, tx, ty, tw, th, 7);
     ctx.fill();
     ctx.strokeStyle = entry.rarityColor;
@@ -2608,7 +2867,7 @@ const Game = {
     // Icon
     ctx.font = '24px Courier New';
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#ecf0f1';
+    ctx.fillStyle = '#c8bfb0';
     ctx.fillText(entry.icon, tx + tw / 2, ty + 28);
 
     // Name
@@ -2622,7 +2881,7 @@ const Game = {
     ctx.fillText(entry.rarityLabel.toUpperCase(), tx + tw / 2, ty + 60);
 
     // Desc
-    ctx.fillStyle = '#bdc3c7';
+    ctx.fillStyle = '#a09080';
     ctx.font = '11px Courier New';
     wrapText(entry.desc, tx + tw / 2, ty + 74, tw - 16, 13);
 
@@ -2645,10 +2904,10 @@ const Game = {
     const panelH = 28 + 6 * rowH + pad;
 
     // Background
-    ctx.fillStyle = 'rgba(10,10,24,0.82)';
+    ctx.fillStyle = 'rgba(16,9,6,0.88)';
     roundRect(ctx, px, panelY, panelW, panelH, 8);
     ctx.fill();
-    ctx.strokeStyle = '#3a3a5a';
+    ctx.strokeStyle = '#3a2218';
     ctx.lineWidth = 1;
     roundRect(ctx, px, panelY, panelW, panelH, 8);
     ctx.stroke();
@@ -2658,7 +2917,7 @@ const Game = {
     ctx.fillStyle = '#f1c40f';
     ctx.textAlign = 'left';
     ctx.fillText('PLAYER STATS', px + pad, panelY + 17);
-    ctx.fillStyle = '#95a5a6';
+    ctx.fillStyle = '#7a6a5c';
     ctx.textAlign = 'right';
     ctx.fillText(
       `${p.weapon.name}  ·  Lv ${p.level}  ·  Luck ${p.luck}/5  ·  HP ${Math.ceil(p.hp)}/${p.maxHp}`,
@@ -2667,7 +2926,7 @@ const Game = {
 
     // Divider
     const divY = panelY + 24;
-    ctx.strokeStyle = '#333';
+    ctx.strokeStyle = '#3a2218';
     ctx.beginPath(); ctx.moveTo(px + pad, divY); ctx.lineTo(px + panelW - pad, divY); ctx.stroke();
 
     const leftStats = [
@@ -2691,18 +2950,18 @@ const Game = {
       ctx.font = '14px Courier New';
       let ry = divY + rowH;
       for (const row of stats) {
-        ctx.fillStyle = '#7f8c8d';
+        ctx.fillStyle = '#7a6a5c';
         ctx.textAlign = 'left';
         ctx.fillText(row.label, colX, ry);
         if (row.max !== undefined) {
           const maxPart = ` / ${row.max}`;
-          ctx.fillStyle = '#7f8c8d';
+          ctx.fillStyle = '#7a6a5c';
           ctx.textAlign = 'right';
           ctx.fillText(maxPart, colX + colW, ry);
-          ctx.fillStyle = row.maxed ? '#f1c40f' : '#ecf0f1';
+          ctx.fillStyle = row.maxed ? '#f1c40f' : '#c8bfb0';
           ctx.fillText(String(row.value), colX + colW - ctx.measureText(maxPart).width, ry);
         } else {
-          ctx.fillStyle = '#ecf0f1';
+          ctx.fillStyle = '#c8bfb0';
           ctx.textAlign = 'right';
           ctx.fillText(String(row.value), colX + colW, ry);
         }
@@ -2715,7 +2974,7 @@ const Game = {
   },
 
   drawMenu() {
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillStyle = 'rgba(8,4,3,0.72)'; // dark blood-tinted overlay
     ctx.fillRect(0, 0, W, H);
     ctx.textAlign = 'center';
 
@@ -2727,7 +2986,7 @@ const Game = {
     ctx.font = 'bold 24px Courier New';
     ctx.fillText('THE  HORDE', W / 2, 103);
 
-    ctx.fillStyle = '#95a5a6';
+    ctx.fillStyle = '#7a6a5c';
     ctx.font = '13px Courier New';
     ctx.fillText('WASD / Arrows to move  ·  Auto-fire at nearest enemy', W / 2, 128);
 
@@ -2748,36 +3007,36 @@ const Game = {
       const inner = cw - 16; // usable text width with 8px padding each side
       const mid   = cx + cw / 2;
 
-      // Background
-      ctx.fillStyle = selected ? 'rgba(40,40,80,0.95)' : 'rgba(20,20,40,0.85)';
+      // Background — charred wood / dark hide
+      ctx.fillStyle = selected ? 'rgba(48,22,14,0.98)' : 'rgba(22,12,8,0.90)';
       roundRect(ctx, cx, cy, cw, ch, 8);
       ctx.fill();
 
       // Border
       ctx.shadowColor = wpn.color;
       ctx.shadowBlur  = selected ? 14 : 0;
-      ctx.strokeStyle = selected ? wpn.color : '#444';
+      ctx.strokeStyle = selected ? wpn.color : '#3a2218';
       ctx.lineWidth   = selected ? 2.5 : 1;
       roundRect(ctx, cx, cy, cw, ch, 8);
       ctx.stroke();
       ctx.shadowBlur = 0;
 
       // Weapon name
-      ctx.fillStyle = selected ? wpn.color : '#ecf0f1';
+      ctx.fillStyle = selected ? wpn.color : '#c8bfb0';
       ctx.font = 'bold 13px Courier New';
       ctx.textAlign = 'center';
       ctx.fillText(wpn.name, mid, cy + 20);
 
       // Tag — wrap within inner width
-      ctx.fillStyle = '#95a5a6';
+      ctx.fillStyle = '#7a6a5c';
       ctx.font = '10px Courier New';
       wrapText(wpn.tag, mid, cy + 36, inner, 13);
 
       // Stat lines (already short enough)
-      ctx.fillStyle = '#bdc3c7';
+      ctx.fillStyle = '#a09080';
       ctx.font = '10px Courier New';
       ctx.fillText(wpn.statA, mid, cy + 66);
-      ctx.fillStyle = wpn.pierce ? '#c39bd3' : '#7f8c8d';
+      ctx.fillStyle = wpn.pierce ? '#c39bd3' : '#6a5a4e';
       ctx.fillText(wpn.statB, mid, cy + 80);
 
       // Store bounds for click detection
@@ -2785,25 +3044,29 @@ const Game = {
     });
 
     // Controls hint
-    ctx.fillStyle = '#7f8c8d';
+    ctx.fillStyle = '#6a5a4e';
     ctx.font = '12px Courier New';
     ctx.fillText('WASD / Arrows to move  ·  Tab = Stats panel  ·  1/2/3 = pick upgrade', W / 2, 286);
 
-    // Start button
-    ctx.fillStyle = '#27ae60';
+    // Start button — blood red, not safe green
+    ctx.fillStyle = '#7a1010';
     roundRect(ctx, W / 2 - 110, 308, 220, 50, 8);
     ctx.fill();
-    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = '#c0392b';
+    ctx.lineWidth = 2;
+    roundRect(ctx, W / 2 - 110, 308, 220, 50, 8);
+    ctx.stroke();
+    ctx.fillStyle = '#f5e6e0';
     ctx.font = 'bold 20px Courier New';
     ctx.fillText('START GAME', W / 2, 339);
 
-    ctx.fillStyle = '#7f8c8d';
+    ctx.fillStyle = '#6a5a4e';
     ctx.font = '13px Courier New';
     ctx.fillText('or press  ENTER', W / 2, 378);
   },
 
   drawGameOver() {
-    ctx.fillStyle = 'rgba(0,0,0,0.82)';
+    ctx.fillStyle = 'rgba(8,2,2,0.86)'; // crimson-dark death screen
     ctx.fillRect(0, 0, W, H);
 
     const isNewBest = this.scores.length > 0 && this.scores[0].score === this.score;
@@ -2835,26 +3098,30 @@ const Game = {
     ctx.fillText(`Level: ${this.player.level}`, lx, 245);
 
     // Divider
-    ctx.strokeStyle = '#444';
+    ctx.strokeStyle = '#3a2218';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(40, 268); ctx.lineTo(410, 268);
     ctx.stroke();
 
     // Weapon used
-    ctx.fillStyle = '#7f8c8d';
+    ctx.fillStyle = '#7a6a5c';
     ctx.font = '15px Courier New';
     ctx.fillText(`Weapon: ${this.player.weapon.name}`, lx, 292);
 
-    // Play again button
-    ctx.fillStyle = '#2980b9';
+    // Play again button — blood red
+    ctx.fillStyle = '#7a1010';
     roundRect(ctx, lx - 110, 330, 220, 48, 8);
     ctx.fill();
-    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = '#c0392b';
+    ctx.lineWidth = 2;
+    roundRect(ctx, lx - 110, 330, 220, 48, 8);
+    ctx.stroke();
+    ctx.fillStyle = '#f5e6e0';
     ctx.font = 'bold 20px Courier New';
     ctx.fillText('PLAY AGAIN', lx, 361);
 
-    ctx.fillStyle = '#7f8c8d';
+    ctx.fillStyle = '#6a5a4e';
     ctx.font = '13px Courier New';
     ctx.fillText('or press ENTER', lx, 406);
 
@@ -2863,10 +3130,10 @@ const Game = {
     const lbX = 460, lbW = 420;
 
     // Panel background
-    ctx.fillStyle = 'rgba(15,15,30,0.9)';
+    ctx.fillStyle = 'rgba(16,9,6,0.94)';
     roundRect(ctx, lbX, 30, lbW, 540, 8);
     ctx.fill();
-    ctx.strokeStyle = '#333';
+    ctx.strokeStyle = '#3a2218';
     ctx.lineWidth = 1;
     roundRect(ctx, lbX, 30, lbW, 540, 8);
     ctx.stroke();
@@ -2878,7 +3145,7 @@ const Game = {
     ctx.fillText('LEADERBOARD', rx, 65);
 
     // Column headers
-    ctx.fillStyle = '#7f8c8d';
+    ctx.fillStyle = '#7a6a5c';
     ctx.font = '12px Courier New';
     ctx.textAlign = 'left';
     ctx.fillText('#', lbX + 16, 94);
@@ -2887,7 +3154,7 @@ const Game = {
     ctx.fillText('Lvl', lbX + 220, 94);
     ctx.fillText('Date', lbX + 290, 94);
 
-    ctx.strokeStyle = '#333';
+    ctx.strokeStyle = '#3a2218';
     ctx.beginPath();
     ctx.moveTo(lbX + 12, 100); ctx.lineTo(lbX + lbW - 12, 100);
     ctx.stroke();
@@ -2908,25 +3175,25 @@ const Game = {
       }
 
       // Rank medal for top 3
-      const rankColors = ['#f1c40f', '#bdc3c7', '#cd7f32'];
-      ctx.fillStyle = i < 3 ? rankColors[i] : '#7f8c8d';
+      const rankColors = ['#f1c40f', '#c8bfb0', '#cd7f32'];
+      ctx.fillStyle = i < 3 ? rankColors[i] : '#7a6a5c';
       ctx.font = i < 3 ? 'bold 14px Courier New' : '13px Courier New';
       ctx.textAlign = 'left';
       ctx.fillText(`${i + 1}`, lbX + 16, ey + 4);
 
-      ctx.fillStyle = isThisRun ? '#f1c40f' : '#ecf0f1';
+      ctx.fillStyle = isThisRun ? '#f1c40f' : '#c8bfb0';
       ctx.font = isThisRun ? 'bold 15px Courier New' : '14px Courier New';
       ctx.fillText(`${e.score}`, lbX + 46, ey + 4);
 
-      ctx.fillStyle = '#bdc3c7';
+      ctx.fillStyle = '#a09080';
       ctx.font = '13px Courier New';
       ctx.fillText(`${e.wave}`, lbX + 150, ey + 4);
       ctx.fillText(`${e.level}`, lbX + 220, ey + 4);
-      ctx.fillStyle = '#7f8c8d';
+      ctx.fillStyle = '#7a6a5c';
       ctx.fillText(`${e.date}`, lbX + 290, ey + 4);
 
       if (i < 9 && i < entries.length - 1) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+        ctx.strokeStyle = 'rgba(100,50,30,0.18)';
         ctx.beginPath();
         ctx.moveTo(lbX + 12, ey + rowH - 6); ctx.lineTo(lbX + lbW - 12, ey + rowH - 6);
         ctx.stroke();
@@ -2934,7 +3201,7 @@ const Game = {
     }
 
     if (entries.length === 0) {
-      ctx.fillStyle = '#555';
+      ctx.fillStyle = '#5a4a3e';
       ctx.font = '14px Courier New';
       ctx.textAlign = 'center';
       ctx.fillText('No scores yet', rx, 200);

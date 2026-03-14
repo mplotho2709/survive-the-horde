@@ -103,10 +103,25 @@ class Player {
     this.regenRate         = 0;
     this.fireCooldownBonus = 0;
     this.luck              = 0;
+    this.evasion           = 0;   // 0–0.40 chance to dodge a hit entirely
+    this.lifesteal         = 0;   // 0–0.30 fraction of bullet damage healed
+    this.armor             = 0;   // flat damage subtracted from each hit
+    this.critChance        = 0;   // 0–0.40 chance for bullets to deal ×2 damage
+    this.thorns            = 0;   // damage dealt per frame to touching enemies
+    this.dodgeFlash        = 0;   // frames to show DODGE! text
     this.activePowerups    = {}; // { type: framesRemaining }
   }
 
   hasPowerup(type) { return (this.activePowerups[type] || 0) > 0; }
+
+  takeDamage(amount) {
+    if (this.hasPowerup('shield')) return;
+    if (this.evasion > 0 && Math.random() < this.evasion) {
+      this.dodgeFlash = 40;
+      return;
+    }
+    this.hp -= Math.max(0.01, amount - this.armor);
+  }
 
   activatePowerup(type) {
     const cfg = POWERUP_CONFIG[type];
@@ -161,6 +176,7 @@ class Player {
 
     if (this.fireCooldown > 0) this.fireCooldown--;
     if (this.levelUpFlash > 0) this.levelUpFlash--;
+    if (this.dodgeFlash   > 0) this.dodgeFlash--;
 
     // Tick active powerups
     for (const type of Object.keys(this.activePowerups)) {
@@ -173,12 +189,15 @@ class Player {
     if (this.fireCooldown === 0 && this.closestEnemy) {
       for (let i = 0; i < this.burstCount; i++) {
         const spread = (i - (this.burstCount - 1) / 2) * this.spreadAngle;
-        const dmg = this.bulletDamage * (this.hasPowerup('enrage') ? 1.5 : 1);
+        const crit = this.critChance > 0 && Math.random() < this.critChance;
+        const dmg  = this.bulletDamage * (this.hasPowerup('enrage') ? 1.5 : 1) * (crit ? 2 : 1);
+        const size = crit ? this.bulletSize * 1.4 : this.bulletSize;
+        const col  = crit ? '#fff' : this.bulletColor;
         bullets.push(new Bullet(
           this.x, this.y,
           this.aimAngle + spread,
-          dmg, this.bulletSize,
-          this.pierce, this.bulletSpeed, this.bulletColor, this.bulletLifetime
+          dmg, size,
+          this.pierce, this.bulletSpeed, col, this.bulletLifetime
         ));
       }
       this.fireCooldown = this.fireCooldownMax;
@@ -197,6 +216,19 @@ class Player {
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.r + 10, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.restore();
+    }
+
+    // Dodge text
+    if (this.dodgeFlash > 0) {
+      const alpha = this.dodgeFlash / 40;
+      const rise  = (40 - this.dodgeFlash) * 0.8;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#f1c40f';
+      ctx.font = 'bold 14px Courier New';
+      ctx.textAlign = 'center';
+      ctx.fillText('DODGE!', this.x, this.y - this.r - 10 - rise);
       ctx.restore();
     }
 
@@ -1000,6 +1032,41 @@ const UPGRADES = [
     apply(p, v) { p.bulletLifetime = Math.min(p.bulletLifetime + v, p.weapon.maxBulletLifetime); },
   },
   {
+    id: 'evasion', name: 'Evasion', icon: '◌',
+    tiers: { common: 0.05, uncommon: 0.08, rare: 0.15 },
+    descFn: (v) => `Dodge chance +${Math.round(v * 100)}%`,
+    maxed: (p) => p.evasion >= 0.40,
+    apply(p, v) { p.evasion = Math.min(p.evasion + v, 0.40); },
+  },
+  {
+    id: 'lifesteal', name: 'Lifesteal', icon: '♦',
+    tiers: { common: 0.03, uncommon: 0.06, rare: 0.12 },
+    descFn: (v) => `Lifesteal +${Math.round(v * 100)}%`,
+    maxed: (p) => p.lifesteal >= 0.30,
+    apply(p, v) { p.lifesteal = Math.min(p.lifesteal + v, 0.30); },
+  },
+  {
+    id: 'armor', name: 'Armor', icon: '▣',
+    tiers: { common: 2, uncommon: 4, rare: 7 },
+    descFn: (v) => `Armor +${v} (flat dmg reduction)`,
+    maxed: (p) => p.armor >= 15,
+    apply(p, v) { p.armor = Math.min(p.armor + v, 15); },
+  },
+  {
+    id: 'crit', name: 'Critical Hit', icon: '✕',
+    tiers: { common: 0.05, uncommon: 0.08, rare: 0.15 },
+    descFn: (v) => `Crit chance +${Math.round(v * 100)}%  (×2 dmg)`,
+    maxed: (p) => p.critChance >= 0.40,
+    apply(p, v) { p.critChance = Math.min(p.critChance + v, 0.40); },
+  },
+  {
+    id: 'thorns', name: 'Thorns', icon: '❖',
+    tiers: { common: 0.3, uncommon: 0.6, rare: 1.0 },
+    descFn: (v) => `Thorns +${v} dmg/frame to touchers`,
+    maxed: (p) => p.thorns >= 3.0,
+    apply(p, v) { p.thorns = Math.min(p.thorns + v, 3.0); },
+  },
+  {
     id: 'luck', name: 'Lucky Break', icon: '★',
     tiers: { common: 1, uncommon: 1, rare: 2 },
     descFn: (v) => `Luck +${v} — better upgrade odds`,
@@ -1154,16 +1221,17 @@ const Game = {
     for (const e of this.enemies) {
       e.update(this.player, this.enemyBullets);
       // Enemy↔player collision — damage scales 10% per wave
-      if (dist(e, this.player) < e.r + this.player.r && !this.player.hasPowerup('shield')) {
-        this.player.hp -= ENEMY_DAMAGE * (1 + (this.waveManager.wave - 1) * 0.06);
+      if (dist(e, this.player) < e.r + this.player.r) {
+        this.player.takeDamage(ENEMY_DAMAGE * (1 + (this.waveManager.wave - 1) * 0.06));
+        if (this.player.thorns > 0) e.hp -= this.player.thorns;
       }
     }
 
     // Update enemy bullets and check player hit
     for (const b of this.enemyBullets) {
       b.update();
-      if (!b.dead && dist(b, this.player) < b.r + this.player.r && !this.player.hasPowerup('shield')) {
-        this.player.hp -= b.damage;
+      if (!b.dead && dist(b, this.player) < b.r + this.player.r) {
+        this.player.takeDamage(b.damage);
         b.dead = true;
       }
     }
@@ -1179,6 +1247,8 @@ const Game = {
         if (b.hitSet && b.hitSet.has(e)) continue; // pierce: skip already-hit
         if (dist(b, e) < e.r + b.size) {
           e.hp -= b.damage;
+          if (this.player.lifesteal > 0)
+            this.player.hp = Math.min(this.player.maxHp, this.player.hp + b.damage * this.player.lifesteal);
           for (let i = 0; i < 5; i++) {
             this.particles.push(new Particle(b.x, b.y, b.color));
           }
@@ -1471,6 +1541,11 @@ const Game = {
       { label: 'Range',       value: `${p.bulletLifetime} frames` },
       { label: 'Pierce',      value: p.pierce ? 'Yes' : 'No' },
       { label: 'Regen',       value: `${p.regenRate.toFixed(2)} HP/f` },
+      { label: 'Evasion',     value: `${Math.round(p.evasion * 100)}%` },
+      { label: 'Armor',       value: p.armor },
+      { label: 'Crit Chance', value: `${Math.round(p.critChance * 100)}%` },
+      { label: 'Lifesteal',   value: `${Math.round(p.lifesteal * 100)}%` },
+      { label: 'Thorns',      value: `${p.thorns.toFixed(1)} dmg/f` },
       null,
       { label: 'HP',          value: `${Math.ceil(p.hp)} / ${p.maxHp}` },
     ];

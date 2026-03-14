@@ -65,6 +65,23 @@ function dist(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
+/** Enforce hard caps on all player stats after any upgrade or item is applied. */
+function clampStats(p) {
+  p.armor      = Math.min(p.armor,      15);
+  p.evasion    = Math.min(p.evasion,    0.75);
+  p.critChance = Math.min(p.critChance, 0.75);
+  p.lifesteal  = Math.min(p.lifesteal,  0.60);
+  p.thorns     = Math.min(p.thorns,     3.0);
+  p.regenRate  = Math.min(p.regenRate,  0.20);
+  p.moveSpeed  = Math.min(p.moveSpeed,  6);
+  p.luck       = Math.min(p.luck,       5);
+  if (p.weapon) {
+    p.bulletDamage   = Math.min(p.bulletDamage,   p.weapon.maxDamage);
+    p.bulletSize     = Math.min(p.bulletSize,      p.weapon.maxBulletSize);
+    p.bulletLifetime = Math.min(p.bulletLifetime,  p.weapon.maxBulletLifetime);
+  }
+}
+
 /** Remove dead items in-place using swap-remove to avoid GC pressure. */
 function pruneDeadInPlace(arr) {
   let i = 0;
@@ -1805,6 +1822,7 @@ const Game = {
     } else {
       upgrade.apply(this.player, upgrade.amount);
     }
+    clampStats(this.player);
     this.upgradeHistory.push({
       name:        upgrade.name,
       icon:        upgrade.icon,

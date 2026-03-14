@@ -19,6 +19,8 @@ const ENEMY_COLORS = {
   heavy:  { fill: '#1a5276', outline: '#2e86c1' },
 };
 
+const GRID = 40; // background grid cell size (pixels)
+
 // ── Leaderboard ────────────────────────────────────────────────────────────
 const Leaderboard = {
   KEY: 'sth_scores',
@@ -42,11 +44,13 @@ const Leaderboard = {
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
+let _canvasRect = null;
 function resizeCanvas() {
   W = window.innerWidth;
   H = window.innerHeight;
   canvas.width  = W;
   canvas.height = H;
+  _canvasRect = canvas.getBoundingClientRect();
 }
 resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
@@ -59,6 +63,15 @@ window.addEventListener('keyup',   e => { keys[e.key] = false; });
 // ── Utility ────────────────────────────────────────────────────────────────
 function dist(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+/** Remove dead items in-place using swap-remove to avoid GC pressure. */
+function pruneDeadInPlace(arr) {
+  let i = 0;
+  while (i < arr.length) {
+    if (arr[i].dead) { arr[i] = arr[arr.length - 1]; arr.length--; }
+    else i++;
+  }
 }
 
 function randEdgePos(cx = W / 2, cy = H / 2) {
@@ -446,18 +459,20 @@ class Enemy {
 
   draw() {
     if (this.type === 'elite') {
-      // Glowing gold body
-      ctx.save();
-      ctx.shadowColor = '#f1c40f';
-      ctx.shadowBlur = 18;
+      // Gold body — double stroke instead of shadowBlur for performance
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
       ctx.fillStyle = '#7d6608';
       ctx.fill();
       ctx.strokeStyle = '#f1c40f';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+      // Outer ring for visual pop
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.r + 5, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(241,196,15,0.4)';
       ctx.lineWidth = 3;
       ctx.stroke();
-      ctx.restore();
 
       // Always-visible HP bar
       const bw = this.r * 2 + 20;
@@ -556,18 +571,22 @@ class Enemy {
     const isDash   = this.chargeState === 'dash';
     const isWindup = this.chargeState === 'windup';
 
-    // Body — bright red-orange, glows during dash
-    if (isDash) {
-      ctx.shadowColor = '#ff4500';
-      ctx.shadowBlur  = 20;
-    }
+    // Body — bright red-orange during dash, thicker stroke conveys speed
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
     ctx.fillStyle   = isDash ? '#ff4500' : '#c0392b';
     ctx.fill();
     ctx.strokeStyle = '#ff6b35';
-    ctx.lineWidth   = 2;
+    ctx.lineWidth   = isDash ? 4 : 2;
     ctx.stroke();
+    if (isDash) {
+      // Speed ring instead of shadowBlur
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.r + 6, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,69,0,0.35)';
+      ctx.lineWidth   = 4;
+      ctx.stroke();
+    }
     ctx.restore();
 
     // Windup indicator: pulsing ring + arrow pointing at locked target
@@ -1120,8 +1139,8 @@ class WaveManager {
     this.roundTimer    = this.roundDuration;
 
     // Spawn interval: scales with wave and screen size (larger screen = faster spawns)
-    const screenScale  = Math.sqrt((W * H) / (900 * 600));
-    this.spawnInterval = Math.max(25, Math.round((120 - (this.wave - 1) * 5) / screenScale));
+    this._densityFactor = Math.sqrt((W * H) / (900 * 600));
+    this.spawnInterval  = Math.max(25, Math.round((120 - (this.wave - 1) * 5) / this._densityFactor));
 
     // Spawn all elites at the very start of every 3rd round so the player
     // has the full round to kill them before the sweep clears remaining enemies.
@@ -1198,9 +1217,8 @@ class WaveManager {
     if (this.spawnTimer >= this.spawnInterval) {
       this.spawnTimer = 0;
       // Scale batch size with screen area so density feels consistent at any resolution
-      const densityFactor = Math.sqrt((W * H) / (900 * 600));
       const baseBatch = 1 + Math.floor((this.wave - 1) / 4);
-      const batch = Math.min(10, Math.round(baseBatch * densityFactor));
+      const batch = Math.min(10, Math.round(baseBatch * this._densityFactor));
       for (let i = 0; i < batch; i++) {
         const pos = randEdgePos(player.x, player.y);
         enemies.push(new Enemy(pos.x, pos.y, this._randomType(), this.wave));
@@ -1893,7 +1911,17 @@ const Game = {
         b.dead = true;
       }
     }
-    this.enemyBullets = this.enemyBullets.filter(b => !b.dead && dist(b, this.player) < Math.max(W, H) * 2);
+    const _ebMaxDistSq = (Math.max(W, H) * 2) ** 2;
+    pruneDeadInPlace(this.enemyBullets);
+    // Also remove bullets that flew too far off screen (squared dist avoids sqrt)
+    for (let _i = this.enemyBullets.length - 1; _i >= 0; _i--) {
+      const _b = this.enemyBullets[_i];
+      const _dx = _b.x - this.player.x, _dy = _b.y - this.player.y;
+      if (_dx * _dx + _dy * _dy > _ebMaxDistSq) {
+        this.enemyBullets[_i] = this.enemyBullets[this.enemyBullets.length - 1];
+        this.enemyBullets.length--;
+      }
+    }
 
     // Update bullets
     for (const b of this.bullets) b.update();
@@ -1999,7 +2027,7 @@ const Game = {
     }
 
     // Remove dead bullets
-    this.bullets = this.bullets.filter(b => !b.dead);
+    pruneDeadInPlace(this.bullets);
 
     // Update XP orbs and check pickup
     const magnetActive = this.player.hasPowerup('magnet');
@@ -2020,7 +2048,7 @@ const Game = {
         }
       }
     }
-    this.xpOrbs = this.xpOrbs.filter(o => !o.dead);
+    pruneDeadInPlace(this.xpOrbs);
 
     // Update floor powerups and check pickup
     for (const pu of this.powerups) {
@@ -2030,7 +2058,7 @@ const Game = {
         pu.dead = true;
       }
     }
-    this.powerups = this.powerups.filter(p => !p.dead);
+    pruneDeadInPlace(this.powerups);
 
     // Update chests and check pickup
     for (const ch of this.chests) {
@@ -2045,11 +2073,11 @@ const Game = {
         }
       }
     }
-    this.chests = this.chests.filter(c => !c.dead);
+    pruneDeadInPlace(this.chests);
 
     // Update particles
     for (const p of this.particles) p.update();
-    this.particles = this.particles.filter(p => !p.dead);
+    pruneDeadInPlace(this.particles);
     if (this.particles.length > 300) this.particles.splice(0, this.particles.length - 300);
     if (this.xpOrbs.length > 150) this.xpOrbs.splice(0, this.xpOrbs.length - 150);
     if (this.enemyBullets.length > 200) this.enemyBullets.splice(0, this.enemyBullets.length - 200);
@@ -2091,7 +2119,6 @@ const Game = {
     if (this.state === STATES.GAME_OVER) { this.drawGameOver(); return; }
 
     // Scrolling grid — offset by camera so it tiles infinitely
-    const GRID = 40;
     const camX = this.player.x - W / 2;
     const camY = this.player.y - H / 2;
     const offX = ((camX % GRID) + GRID) % GRID;
@@ -2971,16 +2998,14 @@ window.addEventListener('keydown', e => {
 
 // ── Input: Mouse click ─────────────────────────────────────────────────────
 canvas.addEventListener('click', e => {
-  const rect = canvas.getBoundingClientRect();
-  const mx = e.clientX - rect.left;
-  const my = e.clientY - rect.top;
+  const mx = e.clientX - (_canvasRect ? _canvasRect.left : 0);
+  const my = e.clientY - (_canvasRect ? _canvasRect.top  : 0);
   Game.handleClick(mx, my);
 });
 
 canvas.addEventListener('mousemove', e => {
-  const rect = canvas.getBoundingClientRect();
-  Game.mouseX = e.clientX - rect.left;
-  Game.mouseY = e.clientY - rect.top;
+  Game.mouseX = e.clientX - (_canvasRect ? _canvasRect.left : 0);
+  Game.mouseY = e.clientY - (_canvasRect ? _canvasRect.top  : 0);
 });
 
 // ── Main loop ──────────────────────────────────────────────────────────────

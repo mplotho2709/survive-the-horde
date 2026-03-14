@@ -110,6 +110,7 @@ class Player {
     this.thorns            = 0;   // damage dealt per frame to touching enemies
     this.dodgeFlash        = 0;   // frames to show DODGE! text
     this.activePowerups    = {}; // { type: framesRemaining }
+    this.ownedItems        = new Set(); // item ids equipped
   }
 
   hasPowerup(type) { return (this.activePowerups[type] || 0) > 0; }
@@ -837,6 +838,117 @@ class WaveManager {
   }
 }
 
+// ── Items ───────────────────────────────────────────────────────────────────
+const ITEMS = [
+  {
+    id: 'iron_fortress', name: 'Iron Fortress', icon: '🏛',
+    desc: '+50 Max HP  ·  +6 Armor',
+    tradeoff: '−0.8 Movement Speed',
+    apply(p) { p.maxHp += 50; p.hp = Math.min(p.hp + 50, p.maxHp); p.armor += 6; p.moveSpeed = Math.max(0.5, p.moveSpeed - 0.8); },
+  },
+  {
+    id: 'berserkers_rage', name: "Berserker's Rage", icon: '⚔',
+    desc: 'Damage ×1.5  ·  Fire rate +20%',
+    tradeoff: 'Armor −8 (take more damage)',
+    apply(p) { p.bulletDamage *= 1.5; p.fireCooldownBonus += Math.floor(p.baseFireCD * 0.2); p.armor -= 8; },
+  },
+  {
+    id: 'ghost_shroud', name: 'Ghost Shroud', icon: '👻',
+    desc: '+25% Evasion  ·  +0.8 Move Speed',
+    tradeoff: '−25 Max HP',
+    apply(p) { p.evasion = Math.min(0.75, p.evasion + 0.25); p.moveSpeed += 0.8; p.maxHp = Math.max(20, p.maxHp - 25); p.hp = Math.min(p.hp, p.maxHp); },
+  },
+  {
+    id: 'eagle_eye', name: 'Eagle Eye', icon: '🎯',
+    desc: '+30% Crit Chance  ·  Bullet range ×1.6',
+    tradeoff: 'Fire rate −10 frames slower',
+    apply(p) { p.critChance = Math.min(0.75, p.critChance + 0.30); p.bulletLifetime = Math.floor(p.bulletLifetime * 1.6); p.fireCooldownBonus -= 10; },
+  },
+  {
+    id: 'vampiric_fang', name: 'Vampiric Fang', icon: '🦷',
+    desc: '+20% Lifesteal  ·  +0.06 Regen/frame',
+    tradeoff: 'Bullet damage −30%',
+    apply(p) { p.lifesteal = Math.min(0.60, p.lifesteal + 0.20); p.regenRate += 0.06; p.bulletDamage = Math.max(0.1, p.bulletDamage * 0.7); },
+  },
+  {
+    id: 'cluster_rounds', name: 'Cluster Rounds', icon: '💥',
+    desc: 'Bullet size +5  ·  Grants Pierce',
+    tradeoff: 'Fire rate −12 frames slower',
+    apply(p) { p.bulletSize += 5; p.pierce = true; p.fireCooldownBonus -= 12; },
+  },
+  {
+    id: 'quicksilver', name: 'Quicksilver', icon: '⚡',
+    desc: '+2.0 Move Speed  ·  +15% Evasion',
+    tradeoff: 'Armor −5',
+    apply(p) { p.moveSpeed += 2.0; p.evasion = Math.min(0.75, p.evasion + 0.15); p.armor -= 5; },
+  },
+  {
+    id: 'thornmail', name: 'Thornmail', icon: '🌵',
+    desc: '+2.0 Thorns/frame  ·  +5 Armor',
+    tradeoff: 'Regen −0.06/frame',
+    apply(p) { p.thorns += 2.0; p.armor += 5; p.regenRate = Math.max(0, p.regenRate - 0.06); },
+  },
+  {
+    id: 'deaths_gambit', name: "Death's Gambit", icon: '💀',
+    desc: 'Damage ×2.0  ·  +20% Crit Chance',
+    tradeoff: 'Max HP halved',
+    apply(p) { p.bulletDamage *= 2.0; p.critChance = Math.min(0.75, p.critChance + 0.20); p.maxHp = Math.max(20, Math.floor(p.maxHp / 2)); p.hp = Math.min(p.hp, p.maxHp); },
+  },
+  {
+    id: 'philosophers_stone', name: "Philosopher's Stone", icon: '🔮',
+    desc: 'Luck +3  ·  Regen +0.08/frame',
+    tradeoff: 'Bullet damage −20%',
+    apply(p) { p.luck = Math.min(5, p.luck + 3); p.regenRate += 0.08; p.bulletDamage = Math.max(0.1, p.bulletDamage * 0.8); },
+  },
+];
+
+// ── Chest (rare floor drop) ─────────────────────────────────────────────────
+class Chest {
+  constructor(x, y) {
+    this.x = x; this.y = y; this.r = 14;
+    this.lifetime = 1800; this.pulse = 0; this.dead = false;
+  }
+
+  update() { this.pulse += 0.06; if (--this.lifetime <= 0) this.dead = true; }
+
+  draw() {
+    const p    = Math.sin(this.pulse) * 0.5 + 0.5;
+    const fade = this.lifetime < 180 ? this.lifetime / 180 : 1;
+    const w = 26, h = 20;
+
+    ctx.save();
+    ctx.globalAlpha = fade;
+    ctx.shadowColor = '#f1c40f';
+    ctx.shadowBlur  = 10 + p * 10;
+
+    // Body
+    ctx.fillStyle = '#7d6608';
+    roundRect(ctx, this.x - w / 2, this.y - h / 2 + 4, w, h - 4, 3);
+    ctx.fill();
+    // Lid
+    ctx.fillStyle = '#9a7d0a';
+    roundRect(ctx, this.x - w / 2, this.y - h / 2, w, 8, 3);
+    ctx.fill();
+    // Gold trim
+    ctx.strokeStyle = '#f1c40f';
+    ctx.lineWidth = 1.5;
+    roundRect(ctx, this.x - w / 2, this.y - h / 2, w, h, 3);
+    ctx.stroke();
+    // Latch
+    ctx.beginPath();
+    ctx.arc(this.x, this.y + 4, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#f1c40f';
+    ctx.fill();
+
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#f1c40f';
+    ctx.font = 'bold 9px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('CHEST', this.x, this.y - h / 2 - 5);
+    ctx.restore();
+  }
+}
+
 // ── Particles ──────────────────────────────────────────────────────────────
 class Particle {
   constructor(x, y, color) {
@@ -1156,6 +1268,7 @@ const Game = {
     this.eliteOrbs      = [];
     this.enemyBullets   = [];
     this.powerups       = [];
+    this.chests         = [];
     this.waveManager    = new WaveManager();
     this.score          = 0;
     this.scores         = Leaderboard.load();
@@ -1168,6 +1281,12 @@ const Game = {
   start() {
     this.init();
     this.state = STATES.PLAYING;
+  },
+
+  _pickItems(n) {
+    const available = ITEMS.filter(it => !this.player.ownedItems.has(it.id));
+    const shuffled  = available.sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, n).map(it => ({ ...it, _isItem: true }));
   },
 
   _pickUpgrades(n) {
@@ -1191,7 +1310,12 @@ const Game = {
   applyUpgrade(index) {
     const upgrade = this.levelUpChoices[index];
     if (!upgrade) return;
-    upgrade.apply(this.player, upgrade.amount);
+    if (upgrade._isItem) {
+      upgrade.apply(this.player);
+      this.player.ownedItems.add(upgrade.id);
+    } else {
+      upgrade.apply(this.player, upgrade.amount);
+    }
     this.player.levelUpFlash = 60;
     this.levelUpChoices = [];
     this.state = STATES.PLAYING;
@@ -1277,6 +1401,7 @@ const Game = {
           this.xpOrbs.push(new XpOrb(e.x, e.y, cfg.value, cfg.color, cfg.glow));
           const drop = rollPowerupDrop();
           if (drop) this.powerups.push(new Powerup(e.x, e.y, drop));
+          if (Math.random() < 0.03) this.chests.push(new Chest(e.x + 20, e.y));
         }
         this.score++;
         return false;
@@ -1330,6 +1455,21 @@ const Game = {
       }
     }
     this.powerups = this.powerups.filter(p => !p.dead);
+
+    // Update chests and check pickup
+    for (const ch of this.chests) {
+      ch.update();
+      if (!ch.dead && dist(ch, this.player) < ch.r + this.player.r) {
+        ch.dead = true;
+        const choices = this._pickItems(3);
+        if (choices.length > 0) {
+          this.levelUpReason  = 'chest';
+          this.levelUpChoices = choices;
+          this.state = STATES.LEVEL_UP;
+        }
+      }
+    }
+    this.chests = this.chests.filter(c => !c.dead);
 
     // Update particles
     for (const p of this.particles) p.update();
@@ -1394,6 +1534,7 @@ const Game = {
     for (const o of this.xpOrbs)    o.draw();
     for (const o of this.eliteOrbs) o.draw();
     for (const p of this.powerups)  p.draw();
+    for (const c of this.chests)    c.draw();
     for (const b of this.bullets)       b.draw();
     for (const b of this.enemyBullets)  b.draw();
     for (const e of this.enemies)       e.draw();
@@ -1593,10 +1734,12 @@ const Game = {
     ctx.textAlign = 'center';
     const isWave  = this.levelUpReason === 'wave';
     const isElite = this.levelUpReason === 'elite';
+    const isChest = this.levelUpReason === 'chest';
     const titleText = isElite ? 'ELITE DEFEATED!'
       : isWave  ? `ROUND ${this.waveManager.wave - 1} COMPLETE!`
+      : isChest ? '📦  CHEST FOUND!'
       : `LEVEL UP!  →  ${this.player.level}`;
-    const titleColor = isElite ? '#f1c40f' : isWave ? '#2ecc71' : '#f1c40f';
+    const titleColor = isElite ? '#f1c40f' : isWave ? '#2ecc71' : isChest ? '#e67e22' : '#f1c40f';
 
     ctx.fillStyle = titleColor;
     ctx.font = 'bold 38px Courier New';
@@ -1615,29 +1758,31 @@ const Game = {
     const startX = (W - totalW) / 2;
     const cardY = 195;
 
+    const cardH = isChest ? 230 : 200;
     this.levelUpChoices.forEach((upg, i) => {
-      const cx = startX + i * (cardW + gap);
-      const rc = upg.rarityColor;
+      const cx  = startX + i * (cardW + gap);
+      const rc  = upg._isItem ? '#e67e22' : upg.rarityColor;
+      const glow = upg._isItem ? 12 : upg.rarityKey === 'rare' ? 16 : upg.rarityKey === 'uncommon' ? 8 : 0;
 
       // Card background
       ctx.fillStyle = '#1a1a2e';
       roundRect(ctx, cx, cardY, cardW, cardH, 10);
       ctx.fill();
 
-      // Rarity-colored border (thicker for rare)
+      // Border
       ctx.shadowColor = rc;
-      ctx.shadowBlur  = upg.rarityKey === 'rare' ? 16 : upg.rarityKey === 'uncommon' ? 8 : 0;
+      ctx.shadowBlur  = glow;
       ctx.strokeStyle = rc;
-      ctx.lineWidth   = upg.rarityKey === 'rare' ? 3 : 2;
+      ctx.lineWidth   = upg._isItem || upg.rarityKey === 'rare' ? 3 : 2;
       roundRect(ctx, cx, cardY, cardW, cardH, 10);
       ctx.stroke();
       ctx.shadowBlur = 0;
 
-      // Rarity badge (top-right)
+      // Badge (top-right)
       ctx.fillStyle = rc;
       ctx.font = 'bold 11px Courier New';
       ctx.textAlign = 'right';
-      ctx.fillText(upg.rarityLabel.toUpperCase(), cx + cardW - 10, cardY + 18);
+      ctx.fillText(upg._isItem ? 'ITEM' : upg.rarityLabel.toUpperCase(), cx + cardW - 10, cardY + 18);
 
       // Number badge (top-left)
       ctx.fillStyle = '#ecf0f1';
@@ -1649,17 +1794,23 @@ const Game = {
       ctx.textAlign = 'center';
       ctx.fillText(upg.icon, cx + cardW / 2, cardY + 75);
 
-      // Name in rarity color
+      // Name
       ctx.fillStyle = rc;
       ctx.font = 'bold 15px Courier New';
       ctx.fillText(upg.name, cx + cardW / 2, cardY + 112);
 
-      // Desc — wrapped so long text stays inside card
+      // Desc
       ctx.fillStyle = '#bdc3c7';
       ctx.font = '12px Courier New';
       wrapText(upg.desc, cx + cardW / 2, cardY + 133, cardW - 20, 16);
 
-      // Store card bounds for click detection
+      // Tradeoff (items only)
+      if (upg._isItem && upg.tradeoff) {
+        ctx.fillStyle = '#e74c3c';
+        ctx.font = '11px Courier New';
+        wrapText('⚠ ' + upg.tradeoff, cx + cardW / 2, cardY + 188, cardW - 20, 15);
+      }
+
       upg._cardX = cx; upg._cardY = cardY; upg._cardW = cardW; upg._cardH = cardH;
     });
   },

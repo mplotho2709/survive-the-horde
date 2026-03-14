@@ -839,67 +839,177 @@ class WaveManager {
 }
 
 // ── Items ───────────────────────────────────────────────────────────────────
+const ITEM_RARITY = {
+  common:    { label: 'Common',    color: '#aab7b8' },
+  uncommon:  { label: 'Uncommon',  color: '#52be80' },
+  rare:      { label: 'Rare',      color: '#5dade2' },
+  legendary: { label: 'Legendary', color: '#f39c12' },
+};
+
 const ITEMS = [
-  {
-    id: 'iron_fortress', name: 'Iron Fortress', icon: '🏛',
-    desc: '+50 Max HP  ·  +6 Armor',
-    tradeoff: '−0.8 Movement Speed',
-    apply(p) { p.maxHp += 50; p.hp = Math.min(p.hp + 50, p.maxHp); p.armor += 6; p.moveSpeed = Math.max(0.5, p.moveSpeed - 0.8); },
-  },
-  {
-    id: 'berserkers_rage', name: "Berserker's Rage", icon: '⚔',
-    desc: 'Damage ×1.5  ·  Fire rate +20%',
-    tradeoff: 'Armor −8 (take more damage)',
-    apply(p) { p.bulletDamage *= 1.5; p.fireCooldownBonus += Math.floor(p.baseFireCD * 0.2); p.armor -= 8; },
-  },
-  {
-    id: 'ghost_shroud', name: 'Ghost Shroud', icon: '👻',
-    desc: '+25% Evasion  ·  +0.8 Move Speed',
-    tradeoff: '−25 Max HP',
-    apply(p) { p.evasion = Math.min(0.75, p.evasion + 0.25); p.moveSpeed += 0.8; p.maxHp = Math.max(20, p.maxHp - 25); p.hp = Math.min(p.hp, p.maxHp); },
-  },
-  {
-    id: 'eagle_eye', name: 'Eagle Eye', icon: '🎯',
-    desc: '+30% Crit Chance  ·  Bullet range ×1.6',
-    tradeoff: 'Fire rate −10 frames slower',
-    apply(p) { p.critChance = Math.min(0.75, p.critChance + 0.30); p.bulletLifetime = Math.floor(p.bulletLifetime * 1.6); p.fireCooldownBonus -= 10; },
-  },
-  {
-    id: 'vampiric_fang', name: 'Vampiric Fang', icon: '🦷',
-    desc: '+20% Lifesteal  ·  +0.06 Regen/frame',
-    tradeoff: 'Bullet damage −30%',
-    apply(p) { p.lifesteal = Math.min(0.60, p.lifesteal + 0.20); p.regenRate += 0.06; p.bulletDamage = Math.max(0.1, p.bulletDamage * 0.7); },
-  },
-  {
-    id: 'cluster_rounds', name: 'Cluster Rounds', icon: '💥',
-    desc: 'Bullet size +5  ·  Grants Pierce',
-    tradeoff: 'Fire rate −12 frames slower',
-    apply(p) { p.bulletSize += 5; p.pierce = true; p.fireCooldownBonus -= 12; },
-  },
-  {
-    id: 'quicksilver', name: 'Quicksilver', icon: '⚡',
-    desc: '+2.0 Move Speed  ·  +15% Evasion',
-    tradeoff: 'Armor −5',
-    apply(p) { p.moveSpeed += 2.0; p.evasion = Math.min(0.75, p.evasion + 0.15); p.armor -= 5; },
-  },
-  {
-    id: 'thornmail', name: 'Thornmail', icon: '🌵',
-    desc: '+2.0 Thorns/frame  ·  +5 Armor',
-    tradeoff: 'Regen −0.06/frame',
-    apply(p) { p.thorns += 2.0; p.armor += 5; p.regenRate = Math.max(0, p.regenRate - 0.06); },
-  },
-  {
-    id: 'deaths_gambit', name: "Death's Gambit", icon: '💀',
-    desc: 'Damage ×2.0  ·  +20% Crit Chance',
-    tradeoff: 'Max HP halved',
-    apply(p) { p.bulletDamage *= 2.0; p.critChance = Math.min(0.75, p.critChance + 0.20); p.maxHp = Math.max(20, Math.floor(p.maxHp / 2)); p.hp = Math.min(p.hp, p.maxHp); },
-  },
-  {
-    id: 'philosophers_stone', name: "Philosopher's Stone", icon: '🔮',
-    desc: 'Luck +3  ·  Regen +0.08/frame',
-    tradeoff: 'Bullet damage −20%',
-    apply(p) { p.luck = Math.min(5, p.luck + 3); p.regenRate += 0.08; p.bulletDamage = Math.max(0.1, p.bulletDamage * 0.8); },
-  },
+  // ── COMMON (15) ──────────────────────────────────────────────────────────
+  { id: 'bandages',        rarity: 'common', name: 'Bandages',          icon: '🩹',
+    desc: '+25 Max HP', tradeoff: null,
+    apply(p) { p.maxHp += 25; p.hp = Math.min(p.hp + 25, p.maxHp); } },
+
+  { id: 'steel_toes',      rarity: 'common', name: 'Steel Toes',        icon: '👟',
+    desc: '+3 Armor', tradeoff: null,
+    apply(p) { p.armor += 3; } },
+
+  { id: 'steady_grip',     rarity: 'common', name: 'Steady Grip',       icon: '🔧',
+    desc: 'Bullet size +2', tradeoff: null,
+    apply(p) { p.bulletSize += 2; } },
+
+  { id: 'swift_feet',      rarity: 'common', name: 'Swift Feet',        icon: '🦶',
+    desc: '+0.5 Move Speed', tradeoff: null,
+    apply(p) { p.moveSpeed += 0.5; } },
+
+  { id: 'lucky_charm',     rarity: 'common', name: 'Lucky Charm',       icon: '🍀',
+    desc: 'Luck +1', tradeoff: null,
+    apply(p) { p.luck = Math.min(5, p.luck + 1); } },
+
+  { id: 'long_barrel',     rarity: 'common', name: 'Long Barrel',       icon: '🔭',
+    desc: 'Bullet range +25%', tradeoff: null,
+    apply(p) { p.bulletLifetime = Math.floor(p.bulletLifetime * 1.25); } },
+
+  { id: 'nanopatch',       rarity: 'common', name: 'Nanopatch',         icon: '💉',
+    desc: 'Regen +0.03/frame', tradeoff: null,
+    apply(p) { p.regenRate += 0.03; } },
+
+  { id: 'keen_eye',        rarity: 'common', name: 'Keen Eye',          icon: '👁',
+    desc: 'Crit chance +8%', tradeoff: null,
+    apply(p) { p.critChance = Math.min(0.75, p.critChance + 0.08); } },
+
+  { id: 'razor_tip',       rarity: 'common', name: 'Razor Tip',         icon: '🔪',
+    desc: 'Damage +0.3  ·  Fire +2 frames', tradeoff: null,
+    apply(p) { p.bulletDamage += 0.3; p.fireCooldownBonus += 2; } },
+
+  { id: 'evasive_roll',    rarity: 'common', name: 'Evasive Roll',      icon: '🌀',
+    desc: 'Evasion +10%', tradeoff: null,
+    apply(p) { p.evasion = Math.min(0.75, p.evasion + 0.10); } },
+
+  { id: 'copper_buckle',   rarity: 'common', name: 'Copper Buckle',     icon: '🛡',
+    desc: 'Armor +2  ·  Max HP +15', tradeoff: null,
+    apply(p) { p.armor += 2; p.maxHp += 15; p.hp = Math.min(p.hp + 15, p.maxHp); } },
+
+  { id: 'traveler_boots',  rarity: 'common', name: "Traveler's Boots",  icon: '🥾',
+    desc: 'Move Speed +0.4  ·  Evasion +5%', tradeoff: null,
+    apply(p) { p.moveSpeed += 0.4; p.evasion = Math.min(0.75, p.evasion + 0.05); } },
+
+  { id: 'barbed_wire',     rarity: 'common', name: 'Barbed Wire',       icon: '⛓',
+    desc: 'Thorns +0.5', tradeoff: 'Armor −1',
+    apply(p) { p.thorns += 0.5; p.armor -= 1; } },
+
+  { id: 'worn_gauntlet',   rarity: 'common', name: 'Worn Gauntlet',     icon: '🥊',
+    desc: 'Damage +0.25  ·  Thorns +0.3', tradeoff: null,
+    apply(p) { p.bulletDamage += 0.25; p.thorns += 0.3; } },
+
+  { id: 'healing_salve',   rarity: 'common', name: 'Healing Salve',     icon: '🫙',
+    desc: 'Max HP +20  ·  Regen +0.02/frame', tradeoff: null,
+    apply(p) { p.maxHp += 20; p.hp = Math.min(p.hp + 20, p.maxHp); p.regenRate += 0.02; } },
+
+  // ── UNCOMMON (10) ─────────────────────────────────────────────────────────
+  { id: 'plated_armor',    rarity: 'uncommon', name: 'Plated Armor',       icon: '🔩',
+    desc: 'Armor +5  ·  Max HP +25', tradeoff: null,
+    apply(p) { p.armor += 5; p.maxHp += 25; p.hp = Math.min(p.hp + 25, p.maxHp); } },
+
+  { id: 'shadow_cloak',    rarity: 'uncommon', name: 'Shadow Cloak',       icon: '🌑',
+    desc: 'Evasion +15%  ·  Move Speed +0.5', tradeoff: null,
+    apply(p) { p.evasion = Math.min(0.75, p.evasion + 0.15); p.moveSpeed += 0.5; } },
+
+  { id: 'battle_standard', rarity: 'uncommon', name: 'Battle Standard',    icon: '⚑',
+    desc: 'Damage +0.6  ·  Crit +10%', tradeoff: null,
+    apply(p) { p.bulletDamage += 0.6; p.critChance = Math.min(0.75, p.critChance + 0.10); } },
+
+  { id: 'leech_blade',     rarity: 'uncommon', name: 'Leech Blade',        icon: '🩸',
+    desc: 'Lifesteal +12%  ·  Damage +0.3', tradeoff: 'Max HP −15',
+    apply(p) { p.lifesteal = Math.min(0.60, p.lifesteal + 0.12); p.bulletDamage += 0.3; p.maxHp = Math.max(20, p.maxHp - 15); p.hp = Math.min(p.hp, p.maxHp); } },
+
+  { id: 'swift_boots',     rarity: 'uncommon', name: 'Swift Boots',        icon: '💨',
+    desc: 'Move Speed +1.2  ·  Evasion +8%', tradeoff: null,
+    apply(p) { p.moveSpeed += 1.2; p.evasion = Math.min(0.75, p.evasion + 0.08); } },
+
+  { id: 'spiked_pauldron', rarity: 'uncommon', name: 'Spiked Pauldron',    icon: '🦴',
+    desc: 'Thorns +1.0  ·  Armor +3', tradeoff: null,
+    apply(p) { p.thorns += 1.0; p.armor += 3; } },
+
+  { id: 'warped_lens',     rarity: 'uncommon', name: 'Warped Lens',        icon: '🔬',
+    desc: 'Bullet size +3  ·  Range +20%', tradeoff: null,
+    apply(p) { p.bulletSize += 3; p.bulletLifetime = Math.floor(p.bulletLifetime * 1.20); } },
+
+  { id: 'hunters_instinct',rarity: 'uncommon', name: "Hunter's Instinct",  icon: '🏹',
+    desc: 'Crit +15%  ·  Fire +4 frames faster', tradeoff: 'Move Speed −0.4',
+    apply(p) { p.critChance = Math.min(0.75, p.critChance + 0.15); p.fireCooldownBonus += 4; p.moveSpeed = Math.max(0.5, p.moveSpeed - 0.4); } },
+
+  { id: 'iron_will',       rarity: 'uncommon', name: 'Iron Will',          icon: '💪',
+    desc: 'Max HP +50  ·  Regen +0.05/frame', tradeoff: 'Move Speed −0.6',
+    apply(p) { p.maxHp += 50; p.hp = Math.min(p.hp + 50, p.maxHp); p.regenRate += 0.05; p.moveSpeed = Math.max(0.5, p.moveSpeed - 0.6); } },
+
+  { id: 'bloodletter',     rarity: 'uncommon', name: 'Bloodletter',        icon: '🗡',
+    desc: 'Lifesteal +18%  ·  Damage +0.5', tradeoff: 'Max HP −25',
+    apply(p) { p.lifesteal = Math.min(0.60, p.lifesteal + 0.18); p.bulletDamage += 0.5; p.maxHp = Math.max(20, p.maxHp - 25); p.hp = Math.min(p.hp, p.maxHp); } },
+
+  // ── RARE (10) ─────────────────────────────────────────────────────────────
+  { id: 'iron_fortress',   rarity: 'rare', name: 'Iron Fortress',      icon: '🏛',
+    desc: 'Armor +8  ·  Max HP +50', tradeoff: 'Move Speed −0.8',
+    apply(p) { p.armor += 8; p.maxHp += 50; p.hp = Math.min(p.hp + 50, p.maxHp); p.moveSpeed = Math.max(0.5, p.moveSpeed - 0.8); } },
+
+  { id: 'ghost_shroud',    rarity: 'rare', name: 'Ghost Shroud',       icon: '👻',
+    desc: 'Evasion +25%  ·  Move Speed +0.8', tradeoff: 'Max HP −30',
+    apply(p) { p.evasion = Math.min(0.75, p.evasion + 0.25); p.moveSpeed += 0.8; p.maxHp = Math.max(20, p.maxHp - 30); p.hp = Math.min(p.hp, p.maxHp); } },
+
+  { id: 'eagle_eye',       rarity: 'rare', name: 'Eagle Eye',          icon: '🎯',
+    desc: 'Crit +30%  ·  Range ×1.6', tradeoff: 'Fire rate −10 frames',
+    apply(p) { p.critChance = Math.min(0.75, p.critChance + 0.30); p.bulletLifetime = Math.floor(p.bulletLifetime * 1.6); p.fireCooldownBonus -= 10; } },
+
+  { id: 'thornmail',       rarity: 'rare', name: 'Thornmail',          icon: '🌵',
+    desc: 'Thorns +2.0  ·  Armor +6', tradeoff: 'Regen −0.06/frame',
+    apply(p) { p.thorns += 2.0; p.armor += 6; p.regenRate = Math.max(0, p.regenRate - 0.06); } },
+
+  { id: 'vampiric_heart',  rarity: 'rare', name: 'Vampiric Heart',     icon: '🦷',
+    desc: 'Lifesteal +20%  ·  Regen +0.07/frame', tradeoff: 'Damage −25%',
+    apply(p) { p.lifesteal = Math.min(0.60, p.lifesteal + 0.20); p.regenRate += 0.07; p.bulletDamage = Math.max(0.1, p.bulletDamage * 0.75); } },
+
+  { id: 'cluster_rounds',  rarity: 'rare', name: 'Cluster Rounds',     icon: '💥',
+    desc: 'Bullet size +5  ·  Grants Pierce', tradeoff: 'Fire rate −12 frames',
+    apply(p) { p.bulletSize += 5; p.pierce = true; p.fireCooldownBonus -= 12; } },
+
+  { id: 'quicksilver',     rarity: 'rare', name: 'Quicksilver',        icon: '⚡',
+    desc: 'Move Speed +2.0  ·  Evasion +18%', tradeoff: 'Armor −6',
+    apply(p) { p.moveSpeed += 2.0; p.evasion = Math.min(0.75, p.evasion + 0.18); p.armor -= 6; } },
+
+  { id: 'soulstealer',     rarity: 'rare', name: 'Soulstealer',        icon: '💫',
+    desc: 'Lifesteal +22%  ·  Crit +20%', tradeoff: 'Move Speed −0.8',
+    apply(p) { p.lifesteal = Math.min(0.60, p.lifesteal + 0.22); p.critChance = Math.min(0.75, p.critChance + 0.20); p.moveSpeed = Math.max(0.5, p.moveSpeed - 0.8); } },
+
+  { id: 'glass_cannon',    rarity: 'rare', name: 'Glass Cannon',       icon: '🏺',
+    desc: 'Damage ×1.7  ·  Bullet size +3', tradeoff: 'Max HP −45  ·  Armor −5',
+    apply(p) { p.bulletDamage *= 1.7; p.bulletSize += 3; p.maxHp = Math.max(20, p.maxHp - 45); p.hp = Math.min(p.hp, p.maxHp); p.armor -= 5; } },
+
+  { id: 'warlords_ring',   rarity: 'rare', name: "Warlord's Ring",     icon: '💍',
+    desc: 'Damage +1.0  ·  Crit +20%  ·  Thorns +1.0', tradeoff: 'Regen −0.08/frame',
+    apply(p) { p.bulletDamage += 1.0; p.critChance = Math.min(0.75, p.critChance + 0.20); p.thorns += 1.0; p.regenRate = Math.max(0, p.regenRate - 0.08); } },
+
+  // ── LEGENDARY (5) ─────────────────────────────────────────────────────────
+  { id: 'berserkers_soul', rarity: 'legendary', name: "Berserker's Soul",  icon: '⚔',
+    desc: 'Damage ×2.5  ·  Fire +40%  ·  Speed +0.5', tradeoff: 'Armor −15  ·  Max HP −40',
+    apply(p) { p.bulletDamage *= 2.5; p.fireCooldownBonus += Math.floor(p.baseFireCD * 0.4); p.moveSpeed += 0.5; p.armor -= 15; p.maxHp = Math.max(20, p.maxHp - 40); p.hp = Math.min(p.hp, p.maxHp); } },
+
+  { id: 'deaths_gambit',   rarity: 'legendary', name: "Death's Gambit",    icon: '💀',
+    desc: 'Damage ×3.0  ·  Crit +40%', tradeoff: 'Max HP halved  ·  Armor −10',
+    apply(p) { p.bulletDamage *= 3.0; p.critChance = Math.min(0.75, p.critChance + 0.40); p.maxHp = Math.max(20, Math.floor(p.maxHp / 2)); p.hp = Math.min(p.hp, p.maxHp); p.armor -= 10; } },
+
+  { id: 'philosophers_stone', rarity: 'legendary', name: "Philosopher's Stone", icon: '📿',
+    desc: 'Luck +4  ·  Regen +0.15/frame', tradeoff: 'Damage −30%',
+    apply(p) { p.luck = Math.min(5, p.luck + 4); p.regenRate += 0.15; p.bulletDamage = Math.max(0.1, p.bulletDamage * 0.70); } },
+
+  { id: 'bulletstorm',     rarity: 'legendary', name: 'Bulletstorm',       icon: '🌪',
+    desc: 'Fire rate ×2  ·  Burst shots +1', tradeoff: 'Bullet size −3  ·  Range −30%',
+    apply(p) { p.baseFireCD = Math.max(4, Math.floor(p.baseFireCD * 0.5)); p.burstCount += 1; p.bulletSize = Math.max(2, p.bulletSize - 3); p.bulletLifetime = Math.max(20, Math.floor(p.bulletLifetime * 0.7)); } },
+
+  { id: 'immortal_coil',   rarity: 'legendary', name: 'Immortal Coil',     icon: '☯',
+    desc: 'Max HP +120  ·  Regen +0.25/frame  ·  Armor +12', tradeoff: 'Damage ×0.3  ·  Speed −1.5',
+    apply(p) { p.maxHp += 120; p.hp = Math.min(p.hp + 120, p.maxHp); p.regenRate += 0.25; p.armor += 12; p.bulletDamage = Math.max(0.1, p.bulletDamage * 0.3); p.moveSpeed = Math.max(0.5, p.moveSpeed - 1.5); } },
 ];
 
 // ── Chest (rare floor drop) ─────────────────────────────────────────────────
@@ -1284,9 +1394,19 @@ const Game = {
   },
 
   _pickItems(n) {
-    const available = ITEMS.filter(it => !this.player.ownedItems.has(it.id));
-    const shuffled  = available.sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, n).map(it => ({ ...it, _isItem: true }));
+    const r = Math.random();
+    const rarity = r < 0.03 ? 'legendary' : r < 0.13 ? 'rare' : r < 0.40 ? 'uncommon' : 'common';
+    this.chestRarity = rarity;
+
+    // Fill slots with rolled rarity, fall back to lower rarities if needed
+    const order = ['legendary', 'rare', 'uncommon', 'common'];
+    let pool = [], ri = order.indexOf(rarity);
+    while (pool.length < n && ri < order.length) {
+      const avail = ITEMS.filter(it => it.rarity === order[ri] && !this.player.ownedItems.has(it.id));
+      pool = pool.concat(avail.sort(() => Math.random() - 0.5).slice(0, n - pool.length));
+      ri++;
+    }
+    return pool.map(it => ({ ...it, _isItem: true }));
   },
 
   _pickUpgrades(n) {
@@ -1735,11 +1855,12 @@ const Game = {
     const isWave  = this.levelUpReason === 'wave';
     const isElite = this.levelUpReason === 'elite';
     const isChest = this.levelUpReason === 'chest';
+    const chestRarityInfo = ITEM_RARITY[this.chestRarity || 'common'];
     const titleText = isElite ? 'ELITE DEFEATED!'
       : isWave  ? `ROUND ${this.waveManager.wave - 1} COMPLETE!`
-      : isChest ? '📦  CHEST FOUND!'
+      : isChest ? `${chestRarityInfo.label.toUpperCase()} CHEST FOUND!`
       : `LEVEL UP!  →  ${this.player.level}`;
-    const titleColor = isElite ? '#f1c40f' : isWave ? '#2ecc71' : isChest ? '#e67e22' : '#f1c40f';
+    const titleColor = isElite ? '#f1c40f' : isWave ? '#2ecc71' : isChest ? chestRarityInfo.color : '#f1c40f';
 
     ctx.fillStyle = titleColor;
     ctx.font = 'bold 38px Courier New';
@@ -1761,8 +1882,10 @@ const Game = {
     const cardH = isChest ? 230 : 200;
     this.levelUpChoices.forEach((upg, i) => {
       const cx  = startX + i * (cardW + gap);
-      const rc  = upg._isItem ? '#e67e22' : upg.rarityColor;
-      const glow = upg._isItem ? 12 : upg.rarityKey === 'rare' ? 16 : upg.rarityKey === 'uncommon' ? 8 : 0;
+      const rc   = upg._isItem ? ITEM_RARITY[upg.rarity].color : upg.rarityColor;
+      const glow = upg._isItem
+        ? (upg.rarity === 'legendary' ? 22 : upg.rarity === 'rare' ? 14 : upg.rarity === 'uncommon' ? 8 : 0)
+        : (upg.rarityKey === 'rare' ? 16 : upg.rarityKey === 'uncommon' ? 8 : 0);
 
       // Card background
       ctx.fillStyle = '#1a1a2e';
@@ -1782,7 +1905,7 @@ const Game = {
       ctx.fillStyle = rc;
       ctx.font = 'bold 11px Courier New';
       ctx.textAlign = 'right';
-      ctx.fillText(upg._isItem ? 'ITEM' : upg.rarityLabel.toUpperCase(), cx + cardW - 10, cardY + 18);
+      ctx.fillText(upg._isItem ? ITEM_RARITY[upg.rarity].label.toUpperCase() : upg.rarityLabel.toUpperCase(), cx + cardW - 10, cardY + 18);
 
       // Number badge (top-left)
       ctx.fillStyle = '#ecf0f1';

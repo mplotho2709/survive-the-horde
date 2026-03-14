@@ -103,11 +103,25 @@ class Player {
     this.regenRate         = 0;
     this.fireCooldownBonus = 0;
     this.luck              = 0;
+    this.activePowerups    = {}; // { type: framesRemaining }
+  }
+
+  hasPowerup(type) { return (this.activePowerups[type] || 0) > 0; }
+
+  activatePowerup(type) {
+    const cfg = POWERUP_CONFIG[type];
+    if (cfg.duration > 0) {
+      this.activePowerups[type] = cfg.duration;
+    } else if (type === 'heal') {
+      this.hp = Math.min(this.maxHp, this.hp + 40);
+    }
   }
 
   get fireCooldownMax() {
     const maxBonus = Math.floor(this.baseFireCD * 0.4);
-    return Math.max(4, this.baseFireCD - Math.min(this.fireCooldownBonus, maxBonus));
+    let cd = Math.max(4, this.baseFireCD - Math.min(this.fireCooldownBonus, maxBonus));
+    if (this.hasPowerup('enrage')) cd = Math.max(4, Math.floor(cd * 0.6));
+    return cd;
   }
 
   addXP(amount) {
@@ -128,8 +142,9 @@ class Player {
     if (keys['a'] || keys['A'] || keys['ArrowLeft'])  dx -= 1;
     if (keys['d'] || keys['D'] || keys['ArrowRight']) dx += 1;
     if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
-    this.x += dx * this.moveSpeed;
-    this.y += dy * this.moveSpeed;
+    const spd = this.moveSpeed * (this.hasPowerup('whirlwind') ? 1.8 : 1);
+    this.x += dx * spd;
+    this.y += dy * spd;
 
     // Regeneration
     if (this.regenRate > 0) this.hp = Math.min(this.maxHp, this.hp + this.regenRate);
@@ -146,16 +161,23 @@ class Player {
 
     if (this.fireCooldown > 0) this.fireCooldown--;
     if (this.levelUpFlash > 0) this.levelUpFlash--;
+
+    // Tick active powerups
+    for (const type of Object.keys(this.activePowerups)) {
+      this.activePowerups[type]--;
+      if (this.activePowerups[type] <= 0) delete this.activePowerups[type];
+    }
   }
 
   tryFire(bullets) {
     if (this.fireCooldown === 0 && this.closestEnemy) {
       for (let i = 0; i < this.burstCount; i++) {
         const spread = (i - (this.burstCount - 1) / 2) * this.spreadAngle;
+        const dmg = this.bulletDamage * (this.hasPowerup('enrage') ? 1.5 : 1);
         bullets.push(new Bullet(
           this.x, this.y,
           this.aimAngle + spread,
-          this.bulletDamage, this.bulletSize,
+          dmg, this.bulletSize,
           this.pierce, this.bulletSpeed, this.bulletColor, this.bulletLifetime
         ));
       }
@@ -164,6 +186,20 @@ class Player {
   }
 
   draw() {
+    // Shield aura
+    if (this.hasPowerup('shield')) {
+      ctx.save();
+      ctx.globalAlpha = 0.5 + Math.sin(Date.now() * 0.01) * 0.3;
+      ctx.shadowColor = '#3498db';
+      ctx.shadowBlur = 20;
+      ctx.strokeStyle = '#85c1e9';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.r + 10, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     // Level-up aura
     if (this.levelUpFlash > 0) {
       ctx.save();
@@ -585,6 +621,84 @@ class EnemyBullet {
   }
 }
 
+// ── Powerup drops ──────────────────────────────────────────────────────────
+const POWERUP_CONFIG = {
+  enrage:    { color: '#e74c3c', glow: '#ff6b35', icon: '⚡', label: 'ENRAGE',    duration: 480 }, // 8s
+  magnet:    { color: '#9b59b6', glow: '#d7bde2', icon: '✦', label: 'MAGNET',    duration: 360 }, // 6s
+  heal:      { color: '#2ecc71', glow: '#27ae60', icon: '♥', label: 'HEAL',      duration: 0   }, // instant
+  shield:    { color: '#3498db', glow: '#85c1e9', icon: '◈', label: 'SHIELD',    duration: 240 }, // 4s
+  whirlwind: { color: '#f1c40f', glow: '#f39c12', icon: '❋', label: 'WHIRLWIND', duration: 360 }, // 6s
+};
+
+const POWERUP_DROP_WEIGHTS = [
+  ['heal',      6.0],
+  ['whirlwind', 3.0],
+  ['enrage',    3.0],
+  ['shield',    2.0],
+  ['magnet',    0.5],
+];
+const _DROP_TOTAL = POWERUP_DROP_WEIGHTS.reduce((s, [, w]) => s + w, 0);
+
+function rollPowerupDrop() {
+  if (Math.random() > 0.15) return null; // 15% base drop chance
+  let r = Math.random() * _DROP_TOTAL;
+  for (const [type, w] of POWERUP_DROP_WEIGHTS) {
+    r -= w;
+    if (r <= 0) return type;
+  }
+  return 'heal';
+}
+
+class Powerup {
+  constructor(x, y, type) {
+    this.x = x; this.y = y; this.type = type;
+    this.r = 10; this.lifetime = 1200; this.pulse = 0; this.dead = false;
+  }
+
+  update() { this.pulse += 0.08; if (--this.lifetime <= 0) this.dead = true; }
+
+  draw() {
+    const cfg = POWERUP_CONFIG[this.type];
+    const p   = Math.sin(this.pulse) * 0.5 + 0.5;
+    const r   = this.r + p * 3;
+    const alpha = this.lifetime < 180 ? this.lifetime / 180 : 1;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = cfg.glow;
+    ctx.shadowBlur  = 10 + p * 8;
+
+    // Pentagon body
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+      i === 0 ? ctx.moveTo(this.x + Math.cos(a) * r, this.y + Math.sin(a) * r)
+              : ctx.lineTo(this.x + Math.cos(a) * r, this.y + Math.sin(a) * r);
+    }
+    ctx.closePath();
+    ctx.fillStyle = cfg.color + '55';
+    ctx.fill();
+    ctx.strokeStyle = cfg.color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Icon
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#fff';
+    ctx.font = `${11 + p * 2}px Courier New`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(cfg.icon, this.x, this.y);
+    ctx.textBaseline = 'alphabetic';
+
+    // Label
+    ctx.fillStyle = cfg.color;
+    ctx.font = 'bold 9px Courier New';
+    ctx.fillText(cfg.label, this.x, this.y - r - 6);
+    ctx.restore();
+  }
+}
+
 // ── WaveManager ────────────────────────────────────────────────────────────
 class WaveManager {
   constructor() {
@@ -974,6 +1088,7 @@ const Game = {
     this.xpOrbs         = [];
     this.eliteOrbs      = [];
     this.enemyBullets   = [];
+    this.powerups       = [];
     this.waveManager    = new WaveManager();
     this.score          = 0;
     this.scores         = Leaderboard.load();
@@ -1039,7 +1154,7 @@ const Game = {
     for (const e of this.enemies) {
       e.update(this.player, this.enemyBullets);
       // Enemy↔player collision — damage scales 10% per wave
-      if (dist(e, this.player) < e.r + this.player.r) {
+      if (dist(e, this.player) < e.r + this.player.r && !this.player.hasPowerup('shield')) {
         this.player.hp -= ENEMY_DAMAGE * (1 + (this.waveManager.wave - 1) * 0.06);
       }
     }
@@ -1047,7 +1162,7 @@ const Game = {
     // Update enemy bullets and check player hit
     for (const b of this.enemyBullets) {
       b.update();
-      if (!b.dead && dist(b, this.player) < b.r + this.player.r) {
+      if (!b.dead && dist(b, this.player) < b.r + this.player.r && !this.player.hasPowerup('shield')) {
         this.player.hp -= b.damage;
         b.dead = true;
       }
@@ -1090,6 +1205,8 @@ const Game = {
         } else {
           const cfg = XP_ORB_CONFIG[e.type];
           this.xpOrbs.push(new XpOrb(e.x, e.y, cfg.value, cfg.color, cfg.glow));
+          const drop = rollPowerupDrop();
+          if (drop) this.powerups.push(new Powerup(e.x, e.y, drop));
         }
         this.score++;
         return false;
@@ -1101,11 +1218,22 @@ const Game = {
     this.bullets = this.bullets.filter(b => !b.dead);
 
     // Update XP orbs and check pickup
+    const magnetActive = this.player.hasPowerup('magnet');
     for (const orb of this.xpOrbs) {
       orb.update();
-      if (!orb.dead && dist(orb, this.player) < XP_PICKUP_RADIUS) {
-        this.player.addXP(orb.value);
-        orb.dead = true;
+      if (!orb.dead) {
+        if (magnetActive) {
+          const d = dist(orb, this.player);
+          if (d > 1) {
+            const a = Math.atan2(this.player.y - orb.y, this.player.x - orb.x);
+            orb.x += Math.cos(a) * Math.min(14, d);
+            orb.y += Math.sin(a) * Math.min(14, d);
+          }
+        }
+        if (dist(orb, this.player) < XP_PICKUP_RADIUS) {
+          this.player.addXP(orb.value);
+          orb.dead = true;
+        }
       }
     }
     this.xpOrbs = this.xpOrbs.filter(o => !o.dead);
@@ -1122,6 +1250,16 @@ const Game = {
       }
     }
     this.eliteOrbs = this.eliteOrbs.filter(o => !o.dead);
+
+    // Update floor powerups and check pickup
+    for (const pu of this.powerups) {
+      pu.update();
+      if (!pu.dead && dist(pu, this.player) < XP_PICKUP_RADIUS + 4) {
+        this.player.activatePowerup(pu.type);
+        pu.dead = true;
+      }
+    }
+    this.powerups = this.powerups.filter(p => !p.dead);
 
     // Update particles
     for (const p of this.particles) p.update();
@@ -1185,6 +1323,7 @@ const Game = {
     for (const p of this.particles) p.draw();
     for (const o of this.xpOrbs)    o.draw();
     for (const o of this.eliteOrbs) o.draw();
+    for (const p of this.powerups)  p.draw();
     for (const b of this.bullets)       b.draw();
     for (const b of this.enemyBullets)  b.draw();
     for (const e of this.enemies)       e.draw();
@@ -1282,6 +1421,38 @@ const Game = {
     ctx.fillText(`LVL ${this.player.level}`, bx + 3, xby + 7);
     ctx.textAlign = 'center';
     ctx.fillText(`XP ${this.player.xp}/${this.player.xpToNext}`, W / 2, xby + 7);
+
+    // Active powerup icons (below XP bar)
+    const active = Object.entries(this.player.activePowerups);
+    if (active.length > 0) {
+      const iconW = 48, iconH = 42, gap = 6;
+      const totalW = active.length * iconW + (active.length - 1) * gap;
+      let ix = W / 2 - totalW / 2;
+      const iy = xby + xbh + 8;
+      for (const [type, timer] of active) {
+        const cfg = POWERUP_CONFIG[type];
+        const ratio = timer / cfg.duration;
+        // Box
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        roundRect(ctx, ix, iy, iconW, iconH, 4); ctx.fill();
+        ctx.strokeStyle = cfg.color;
+        ctx.lineWidth = 1.5;
+        roundRect(ctx, ix, iy, iconW, iconH, 4); ctx.stroke();
+        // Icon + label
+        ctx.fillStyle = cfg.color;
+        ctx.font = 'bold 14px Courier New';
+        ctx.textAlign = 'center';
+        ctx.fillText(cfg.icon, ix + iconW / 2, iy + 18);
+        ctx.font = '8px Courier New';
+        ctx.fillText(cfg.label, ix + iconW / 2, iy + 28);
+        // Timer bar
+        ctx.fillStyle = '#333';
+        ctx.fillRect(ix + 4, iy + iconH - 7, iconW - 8, 4);
+        ctx.fillStyle = cfg.color;
+        ctx.fillRect(ix + 4, iy + iconH - 7, (iconW - 8) * ratio, 4);
+        ix += iconW + gap;
+      }
+    }
   },
 
   drawStatsPanel() {

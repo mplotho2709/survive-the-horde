@@ -365,7 +365,7 @@ class Enemy {
       medium:  { hp: 5,  speed: 1.5 },
       fast:    { hp: 3,  speed: 2.5 },
       heavy:   { hp: 8,  speed: 0.8 },
-      charger: { hp: 6,  speed: 0.6 },
+      charger: { hp: 12, speed: 1.1 },
       shooter: { hp: 4,  speed: 1.1 },
       elite:   { hp: 60, speed: 1.0 },
     };
@@ -379,9 +379,10 @@ class Enemy {
     // Charger state machine
     if (type === 'charger') {
       this.chargeState  = 'idle';   // idle → windup → dash → cooldown
-      this.chargeTimer  = 80 + Math.floor(Math.random() * 40); // frames until next windup
+      this.chargeTimer  = 55 + Math.floor(Math.random() * 30); // frames until next windup
       this.dashAngle    = 0;
       this.dashSpeed    = 0;
+      this.dashHit      = false;    // burst damage fires once per dash
     }
 
     // Shooter state
@@ -444,31 +445,31 @@ class Enemy {
       this.y += Math.sin(angle) * this.speed;
       if (this.chargeTimer <= 0) {
         this.chargeState = 'windup';
-        this.chargeTimer = 70; // windup duration
+        this.chargeTimer = 50; // windup duration
         this.dashAngle   = Math.atan2(player.y - this.y, player.x - this.x);
       }
     } else if (this.chargeState === 'windup') {
       // Stand still — update target angle during first 80% of windup, then lock it
-      if (this.chargeTimer > 14) {
+      if (this.chargeTimer > 10) {
         this.dashAngle = Math.atan2(player.y - this.y, player.x - this.x);
       }
       if (this.chargeTimer <= 0) {
         this.chargeState = 'dash';
-        this.chargeTimer = 35; // dash duration
-        this.dashSpeed   = player.moveSpeed * 3.5;
+        this.chargeTimer = 40; // dash duration
+        this.dashSpeed   = player.moveSpeed * 5.5;
+        this.dashHit     = false;
       }
     } else if (this.chargeState === 'dash') {
       this.x += Math.cos(this.dashAngle) * this.dashSpeed;
       this.y += Math.sin(this.dashAngle) * this.dashSpeed;
-      // Clamp to arena
       if (this.chargeTimer <= 0) {
         this.chargeState = 'cooldown';
-        this.chargeTimer = 50;
+        this.chargeTimer = 35;
       }
     } else if (this.chargeState === 'cooldown') {
       if (this.chargeTimer <= 0) {
         this.chargeState = 'idle';
-        this.chargeTimer = 80 + Math.floor(Math.random() * 40);
+        this.chargeTimer = 55 + Math.floor(Math.random() * 30);
       }
     }
   }
@@ -1878,9 +1879,15 @@ const Game = {
     // Update enemies
     for (const e of this.enemies) {
       e.update(this.player, this.enemyBullets);
-      // Enemy↔player collision — damage scales 10% per wave
+      // Enemy↔player collision — damage scales 6% per wave
       if (dist(e, this.player) < e.r + this.player.r) {
-        this.player.takeDamage(ENEMY_DAMAGE * (1 + (this.waveManager.wave - 1) * 0.06));
+        if (e.type === 'charger' && e.chargeState === 'dash' && !e.dashHit) {
+          // Burst damage on dash impact — much more punishing than normal touch
+          this.player.takeDamage(18 + (this.waveManager.wave - 1) * 1.2);
+          e.dashHit = true;
+        } else {
+          this.player.takeDamage(ENEMY_DAMAGE * (1 + (this.waveManager.wave - 1) * 0.06));
+        }
         if (this.player.thorns > 0) e.hp -= this.player.thorns;
       }
     }

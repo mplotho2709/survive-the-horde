@@ -689,6 +689,329 @@ class EnemyBullet {
   }
 }
 
+// ── Boss ────────────────────────────────────────────────────────────────────
+const BOSS_TYPES = ['colossus', 'necromancer', 'berserker'];
+const BOSS_DEFS = {
+  colossus:    { name: 'The Colossus',    color: '#1a2a3a', accent: '#85c1e9', hp: 500, speed: 0.75, r: 46 },
+  necromancer: { name: 'The Necromancer', color: '#4a1a6a', accent: '#d7bde2', hp: 320, speed: 1.6,  r: 30 },
+  berserker:   { name: 'The Berserker',   color: '#7b1a1a', accent: '#e74c3c', hp: 420, speed: 1.5,  r: 36 },
+};
+
+class Boss {
+  constructor(x, y, type, wave) {
+    this.x    = x;
+    this.y    = y;
+    this.type = type;
+    this.dead = false;
+    const def   = BOSS_DEFS[type];
+    const scale = 1 + Math.max(0, wave - 10) * 0.18;
+    this.name   = def.name;
+    this.color  = def.color;
+    this.accent = def.accent;
+    this.r      = def.r;
+    this.speed  = def.speed;
+    this.maxHp  = Math.ceil(def.hp * scale);
+    this.hp     = this.maxHp;
+    this.pulse  = 0;
+    this.wave   = wave;
+
+    if (type === 'colossus') {
+      this.chargeState = 'idle';
+      this.chargeTimer = 200;
+      this.dashAngle   = 0;
+      this.dashSpeed   = 0;
+      this.shockTimer  = 240;
+      this.shockwave   = null; // { r, maxR, life, maxLife, hitPlayer }
+    }
+    if (type === 'necromancer') {
+      this.orbitAngle      = 0;
+      this.barrageCooldown = 100;
+      this.summonCooldown  = 320;
+    }
+    if (type === 'berserker') {
+      this.shootTimer = 55;
+      this.enraged    = false;
+    }
+  }
+
+  update(player, enemies, enemyBullets) {
+    this.pulse += 0.04;
+    if (this.type === 'colossus')    this._updateColossus(player, enemyBullets);
+    if (this.type === 'necromancer') this._updateNecromancer(player, enemies, enemyBullets);
+    if (this.type === 'berserker')   this._updateBerserker(player, enemyBullets);
+  }
+
+  _updateColossus(player, _enemyBullets) {
+    // Shockwave tick + player damage
+    if (this.shockwave) {
+      const sw = this.shockwave;
+      sw.r   += sw.maxR / sw.maxLife;
+      sw.life--;
+      const d = dist(this, player);
+      if (!sw.hitPlayer && Math.abs(d - sw.r) < 28) {
+        sw.hitPlayer = true;
+        player.takeDamage(22);
+      }
+      if (sw.life <= 0) this.shockwave = null;
+    }
+
+    // Shockwave trigger
+    this.shockTimer--;
+    if (this.shockTimer <= 0) {
+      this.shockwave  = { r: this.r + 8, maxR: 300, life: 45, maxLife: 45, hitPlayer: false };
+      this.shockTimer = 210 + Math.floor(Math.random() * 60);
+    }
+
+    // Charge state machine
+    this.chargeTimer--;
+    if (this.chargeState === 'idle') {
+      const a = Math.atan2(player.y - this.y, player.x - this.x);
+      this.x += Math.cos(a) * this.speed;
+      this.y += Math.sin(a) * this.speed;
+      if (this.chargeTimer <= 0) {
+        this.chargeState = 'windup';
+        this.chargeTimer = 80;
+        this.dashAngle   = Math.atan2(player.y - this.y, player.x - this.x);
+      }
+    } else if (this.chargeState === 'windup') {
+      if (this.chargeTimer > 20)
+        this.dashAngle = Math.atan2(player.y - this.y, player.x - this.x);
+      if (this.chargeTimer <= 0) {
+        this.chargeState = 'dash';
+        this.chargeTimer = 45;
+        this.dashSpeed   = player.moveSpeed * 5.5;
+      }
+    } else if (this.chargeState === 'dash') {
+      this.x += Math.cos(this.dashAngle) * this.dashSpeed;
+      this.y += Math.sin(this.dashAngle) * this.dashSpeed;
+      if (this.chargeTimer <= 0) { this.chargeState = 'cooldown'; this.chargeTimer = 90; }
+    } else {
+      if (this.chargeTimer <= 0) {
+        this.chargeState = 'idle';
+        this.chargeTimer = 180 + Math.floor(Math.random() * 60);
+      }
+    }
+  }
+
+  _updateNecromancer(player, enemies, enemyBullets) {
+    this.orbitAngle += 0.025;
+
+    // Maintain preferred distance, strafe
+    const d   = dist(this, player);
+    const ang = Math.atan2(player.y - this.y, player.x - this.x);
+    const preferred = 270;
+    if (d < preferred - 50) {
+      this.x -= Math.cos(ang) * this.speed;
+      this.y -= Math.sin(ang) * this.speed;
+    } else if (d > preferred + 70) {
+      this.x += Math.cos(ang) * this.speed;
+      this.y += Math.sin(ang) * this.speed;
+    } else {
+      this.x += Math.cos(ang + Math.PI / 2) * this.speed;
+      this.y += Math.sin(ang + Math.PI / 2) * this.speed;
+    }
+
+    // 8-bullet ring barrage
+    this.barrageCooldown--;
+    if (this.barrageCooldown <= 0) {
+      for (let i = 0; i < 8; i++) {
+        const a = (Math.PI * 2 * i) / 8 + this.orbitAngle;
+        enemyBullets.push(new EnemyBullet(this.x, this.y, a));
+      }
+      this.barrageCooldown = 110 + Math.floor(Math.random() * 40);
+    }
+
+    // Summon 4 fast enemies
+    this.summonCooldown--;
+    if (this.summonCooldown <= 0) {
+      for (let i = 0; i < 4; i++) {
+        const a = (Math.PI * 2 * i) / 4;
+        enemies.push(new Enemy(
+          this.x + Math.cos(a) * 110,
+          this.y + Math.sin(a) * 110,
+          'fast', this.wave
+        ));
+      }
+      this.summonCooldown = 340 + Math.floor(Math.random() * 80);
+    }
+  }
+
+  _updateBerserker(player, enemyBullets) {
+    this.enraged = (this.hp / this.maxHp) < 0.30;
+    const spdMult  = this.enraged ? 1.9 : 1.0;
+    const shotRate = this.enraged ? 26  : 56;
+
+    const a = Math.atan2(player.y - this.y, player.x - this.x);
+    this.x += Math.cos(a) * this.speed * spdMult;
+    this.y += Math.sin(a) * this.speed * spdMult;
+
+    this.shootTimer--;
+    if (this.shootTimer <= 0) {
+      const shots  = this.enraged ? 5 : 3;
+      const spread = 0.26;
+      for (let i = 0; i < shots; i++) {
+        const offset = (i - (shots - 1) / 2) * spread;
+        enemyBullets.push(new EnemyBullet(this.x, this.y, a + offset));
+      }
+      this.shootTimer = shotRate;
+    }
+  }
+
+  draw() {
+    ctx.save();
+    if (this.type === 'colossus')    this._drawColossus();
+    if (this.type === 'necromancer') this._drawNecromancer();
+    if (this.type === 'berserker')   this._drawBerserker();
+
+    // Shockwave ring (Colossus)
+    if (this.shockwave) {
+      const sw = this.shockwave;
+      ctx.globalAlpha = (sw.life / sw.maxLife) * 0.85;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, sw.r, 0, Math.PI * 2);
+      ctx.strokeStyle = '#aed6f1';
+      ctx.lineWidth = 8 * (sw.life / sw.maxLife);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    // HP bar above boss
+    const bw = this.r * 3, bh = 7;
+    const bx = this.x - bw / 2, by = this.y - this.r - 20;
+    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(bx, by, bw, bh);
+    const hp = this.hp / this.maxHp;
+    ctx.fillStyle = hp > 0.5 ? '#e74c3c' : hp > 0.25 ? '#e67e22' : '#f1c40f';
+    ctx.fillRect(bx, by, bw * hp, bh);
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    // Name tag
+    ctx.fillStyle = this.accent;
+    ctx.font = 'bold 11px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText(this.name, this.x, this.y - this.r - 24);
+    ctx.restore();
+  }
+
+  _drawColossus() {
+    const charging = this.chargeState === 'dash';
+    const windup   = this.chargeState === 'windup';
+
+    ctx.shadowColor = charging ? '#e74c3c' : this.accent;
+    ctx.shadowBlur  = 18 + Math.sin(this.pulse) * 7;
+
+    // Outer body
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    ctx.fillStyle = charging ? '#5d1a1a' : this.color;
+    ctx.fill();
+    ctx.strokeStyle = this.accent;
+    ctx.lineWidth = 3.5;
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+
+    // Middle ring
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r * 0.65, 0, Math.PI * 2);
+    ctx.strokeStyle = charging ? '#e74c3c' : '#2e6a8e';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Core
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r * 0.28, 0, Math.PI * 2);
+    ctx.fillStyle = this.accent;
+    ctx.fill();
+
+    // Windup arrow
+    if (windup) {
+      ctx.save();
+      ctx.shadowColor = '#e74c3c';
+      ctx.shadowBlur  = 12;
+      ctx.strokeStyle = '#e74c3c';
+      ctx.lineWidth   = 3;
+      const len = this.r + 28;
+      ctx.beginPath();
+      ctx.moveTo(this.x, this.y);
+      ctx.lineTo(this.x + Math.cos(this.dashAngle) * len, this.y + Math.sin(this.dashAngle) * len);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  _drawNecromancer() {
+    ctx.shadowColor = this.accent;
+    ctx.shadowBlur  = 14 + Math.sin(this.pulse) * 5;
+
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    ctx.fillStyle = this.color;
+    ctx.fill();
+    ctx.strokeStyle = this.accent;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+
+    // Inner sigil
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r * 0.38, 0, Math.PI * 2);
+    ctx.fillStyle = this.accent;
+    ctx.globalAlpha = 0.7;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // 3 orbiting satellites
+    for (let i = 0; i < 3; i++) {
+      const a  = this.orbitAngle + (Math.PI * 2 * i) / 3;
+      const ox = this.x + Math.cos(a) * (this.r + 14);
+      const oy = this.y + Math.sin(a) * (this.r + 14);
+      ctx.beginPath();
+      ctx.arc(ox, oy, 5, 0, Math.PI * 2);
+      ctx.fillStyle = this.accent;
+      ctx.fill();
+    }
+  }
+
+  _drawBerserker() {
+    const enraged   = this.enraged;
+    const glowColor = enraged ? '#f39c12' : this.accent;
+
+    ctx.shadowColor = glowColor;
+    ctx.shadowBlur  = enraged ? 28 + Math.abs(Math.sin(this.pulse * 3)) * 14 : 12;
+
+    // 7-point star polygon
+    const pts = 7, outer = this.r, inner = this.r * 0.52;
+    ctx.beginPath();
+    for (let i = 0; i < pts * 2; i++) {
+      const a   = (Math.PI * 2 * i) / (pts * 2) - Math.PI / 2 + this.pulse * 0.25;
+      const rad = i % 2 === 0 ? outer : inner;
+      const px  = this.x + Math.cos(a) * rad;
+      const py  = this.y + Math.sin(a) * rad;
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = enraged ? '#c0392b' : this.color;
+    ctx.fill();
+    ctx.strokeStyle = glowColor;
+    ctx.lineWidth   = 2;
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+
+    // Core
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r * 0.28, 0, Math.PI * 2);
+    ctx.fillStyle = enraged ? '#f1c40f' : '#e74c3c';
+    ctx.fill();
+  }
+}
+
 // ── Powerup drops ──────────────────────────────────────────────────────────
 const POWERUP_CONFIG = {
   enrage:    { color: '#e74c3c', glow: '#ff6b35', icon: '⚡', label: 'ENRAGE',    duration: 480 }, // 8s
@@ -776,7 +1099,9 @@ class WaveManager {
     this.betweenWaveTimer = 0;
     this.roundTimer       = 0;
     this.roundDuration    = 0;
-    this.eliteQueue       = []; // frame counts (roundTimer values) at which to spawn an elite
+    this.eliteQueue       = [];
+    this.pendingBoss      = null;  // boss type to spawn at wave start, or null
+    this.overtime         = false; // true when round timer expired but boss is alive
     this.startNextWave();
   }
 
@@ -807,6 +1132,13 @@ class WaveManager {
         this.eliteQueue.push(this.roundDuration); // triggers on frame 1
       }
     }
+
+    // Random boss: 20% chance per wave starting wave 10, only one boss at a time
+    this.pendingBoss = null;
+    if (this.wave >= 10 && Math.random() < 0.20) {
+      this.pendingBoss = BOSS_TYPES[Math.floor(Math.random() * BOSS_TYPES.length)];
+    }
+    this.overtime = false;
   }
 
   _randomType() {
@@ -829,7 +1161,7 @@ class WaveManager {
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
-  update(enemies, player) {
+  update(enemies, player, hasBoss = false) {
     if (this.waveCleared) {
       this.betweenWaveTimer++;
       if (this.betweenWaveTimer > 120) {
@@ -842,7 +1174,14 @@ class WaveManager {
     // Count down round timer
     this.roundTimer--;
     if (this.roundTimer <= 0) {
-      this.waveCleared = true;
+      if (hasBoss) {
+        // Boss still alive — enter/stay in overtime
+        this.overtime = true;
+      } else {
+        // Normal end or boss just died
+        this.overtime    = false;
+        this.waveCleared = true;
+      }
       return;
     }
 
@@ -1375,6 +1714,7 @@ const Game = {
   upgradeHistory: [],
   mouseX: 0,
   mouseY: 0,
+  boss: null,
   selectedWeaponIndex: 0,
 
   init() {
@@ -1394,6 +1734,7 @@ const Game = {
     this.waveUpgradeForWave = 0;
     this.showStats         = false;
     this.upgradeHistory    = [];
+    this.boss              = null;
   },
 
   start() {
@@ -1464,16 +1805,34 @@ const Game = {
     this.player.update(this.enemies);
     this.player.tryFire(this.bullets);
 
-    const wasPlaying = !this.waveManager.betweenWaves;
-    this.waveManager.update(this.enemies, this.player);
+    const wasInBetween = this.waveManager.betweenWaves;
+    const wasOvertime  = this.waveManager.overtime;
+    this.waveManager.update(this.enemies, this.player, !!this.boss);
 
-    // Round just ended — sweep remaining enemies off the field
-    if (wasPlaying && this.waveManager.betweenWaves) {
-      const deathColors = { slow: '#ff6666', medium: '#f0a050', fast: '#c39bd3', heavy: '#2e86c1', elite: '#f1c40f' };
+    const deathColors = { slow: '#ff6666', medium: '#f0a050', fast: '#c39bd3', heavy: '#2e86c1', elite: '#f1c40f' };
+
+    // Transition to between-waves (normal end OR boss killed in overtime)
+    if (!wasInBetween && this.waveManager.betweenWaves) {
       for (const e of this.enemies) {
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < 8; i++)
           this.particles.push(new Particle(e.x, e.y, deathColors[e.type] || '#aaa'));
-        }
+      }
+      this.enemies = [];
+      this.enemyBullets = [];
+    }
+
+    // New wave just started — spawn pending boss
+    if (wasInBetween && !this.waveManager.betweenWaves && this.waveManager.pendingBoss) {
+      const pos    = randEdgePos(this.player.x, this.player.y);
+      this.boss    = new Boss(pos.x, pos.y, this.waveManager.pendingBoss, this.waveManager.wave);
+      this.waveManager.pendingBoss = null;
+    }
+
+    // Just entered overtime — sweep regular enemies, leave only boss
+    if (!wasOvertime && this.waveManager.overtime) {
+      for (const e of this.enemies) {
+        for (let i = 0; i < 6; i++)
+          this.particles.push(new Particle(e.x, e.y, deathColors[e.type] || '#aaa'));
       }
       this.enemies = [];
       this.enemyBullets = [];
@@ -1546,6 +1905,61 @@ const Game = {
       }
       return true;
     });
+
+    // ── Boss update ────────────────────────────────────────────────────────
+    if (this.boss) {
+      this.boss.update(this.player, this.enemies, this.enemyBullets);
+
+      // Boss contact damage (2× regular enemy damage, scaled by wave)
+      if (dist(this.boss, this.player) < this.boss.r + this.player.r) {
+        this.player.takeDamage(ENEMY_DAMAGE * 2 * (1 + (this.waveManager.wave - 1) * 0.06));
+        if (this.player.thorns > 0) this.boss.hp -= this.player.thorns;
+      }
+
+      // Player bullets vs boss
+      for (const b of this.bullets) {
+        if (b.dead) continue;
+        if (dist(b, this.boss) < this.boss.r + b.size) {
+          const crit   = Math.random() < this.player.critChance;
+          const dmg    = b.damage * (crit ? 2 : 1);
+          this.boss.hp -= dmg;
+          if (this.player.lifesteal > 0)
+            this.player.hp = Math.min(this.player.maxHp, this.player.hp + dmg * this.player.lifesteal);
+          for (let i = 0; i < 3; i++)
+            this.particles.push(new Particle(b.x, b.y, this.boss.accent));
+          if (!b.pierce) b.dead = true;
+        }
+      }
+
+      // Boss death
+      if (this.boss.hp <= 0) {
+        // Big explosion
+        for (let i = 0; i < 60; i++) {
+          this.particles.push(new Particle(
+            this.boss.x + (Math.random() - 0.5) * this.boss.r * 2,
+            this.boss.y + (Math.random() - 0.5) * this.boss.r * 2,
+            i % 2 === 0 ? this.boss.accent : this.boss.color
+          ));
+        }
+        // Drop 3 chests + 6 XP orbs
+        for (let i = 0; i < 3; i++) {
+          this.chests.push(new Chest(
+            this.boss.x + (Math.random() - 0.5) * 100,
+            this.boss.y + (Math.random() - 0.5) * 100
+          ));
+        }
+        const cfg = XP_ORB_CONFIG['elite'];
+        for (let i = 0; i < 6; i++) {
+          this.xpOrbs.push(new XpOrb(
+            this.boss.x + (Math.random() - 0.5) * 80,
+            this.boss.y + (Math.random() - 0.5) * 80,
+            cfg.value * 3, cfg.color, cfg.glow
+          ));
+        }
+        this.score += 15;
+        this.boss = null;
+      }
+    }
 
     // Remove dead bullets
     this.bullets = this.bullets.filter(b => !b.dead);
@@ -1669,6 +2083,7 @@ const Game = {
     for (const b of this.bullets)       { if (inView(b.x, b.y)) b.draw(); }
     for (const b of this.enemyBullets)  { if (inView(b.x, b.y)) b.draw(); }
     for (const e of this.enemies)       { if (inView(e.x, e.y, e.r)) e.draw(); }
+    if (this.boss)                        this.boss.draw();
     this.player.draw();
 
     ctx.restore();
@@ -1700,20 +2115,49 @@ const Game = {
     ctx.textAlign = 'left';
     ctx.fillText(`Round ${this.waveManager.wave}`, 14, 24);
 
-    // Countdown timer
-    const secsLeft = this.waveManager.betweenWaves ? 0 : this.waveManager.roundSecsLeft;
-    const timerColor = secsLeft <= 10 ? '#e74c3c' : '#ecf0f1';
-    ctx.fillStyle = timerColor;
-    ctx.fillText(`${secsLeft}s left`, 14, 46);
+    // Countdown timer / overtime indicator
+    if (this.waveManager.overtime) {
+      ctx.fillStyle = Math.floor(Date.now() / 500) % 2 === 0 ? '#e74c3c' : '#f39c12';
+      ctx.fillText('⚡ OVERTIME', 14, 46);
+    } else {
+      const secsLeft   = this.waveManager.betweenWaves ? 0 : this.waveManager.roundSecsLeft;
+      const timerColor = secsLeft <= 10 ? '#e74c3c' : '#ecf0f1';
+      ctx.fillStyle = timerColor;
+      ctx.fillText(`${secsLeft}s left`, 14, 46);
+    }
 
     // Round progress bar (thin, under the text)
     const tbw = 100, tbh = 4, tbx = 14, tby = 52;
-    const timeRatio = this.waveManager.betweenWaves ? 0
+    const timeRatio = (this.waveManager.betweenWaves || this.waveManager.overtime) ? 0
       : this.waveManager.roundTimer / this.waveManager.roundDuration;
     ctx.fillStyle = '#333';
     ctx.fillRect(tbx, tby, tbw, tbh);
-    ctx.fillStyle = secsLeft <= 10 ? '#e74c3c' : '#2ecc71';
+    ctx.fillStyle = this.waveManager.overtime ? '#e74c3c' : (timeRatio < 0.17 ? '#e74c3c' : '#2ecc71');
     ctx.fillRect(tbx, tby, tbw * timeRatio, tbh);
+
+    // Boss HP bar (bottom-center, prominent)
+    if (this.boss) {
+      const bw = Math.min(500, W * 0.45), bh = 18;
+      const bx = W / 2 - bw / 2, by = H - 36;
+      const hp = this.boss.hp / this.boss.maxHp;
+      const def = BOSS_DEFS[this.boss.type];
+
+      ctx.fillStyle = 'rgba(0,0,0,0.75)';
+      roundRect(ctx, bx - 2, by - 18, bw + 4, bh + 22, 5); ctx.fill();
+
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(bx, by, bw, bh);
+      ctx.fillStyle = hp > 0.5 ? '#e74c3c' : hp > 0.25 ? '#e67e22' : '#f1c40f';
+      ctx.fillRect(bx, by, bw * hp, bh);
+      ctx.strokeStyle = def.accent;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(bx, by, bw, bh);
+
+      ctx.fillStyle = def.accent;
+      ctx.font = 'bold 12px Courier New';
+      ctx.textAlign = 'center';
+      ctx.fillText(`⚠ ${this.boss.name.toUpperCase()}  ${Math.ceil(this.boss.hp)} / ${this.boss.maxHp}`, W / 2, by - 4);
+    }
 
     // Score + Level (top-right)
     ctx.textAlign = 'right';

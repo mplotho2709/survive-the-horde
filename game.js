@@ -1152,9 +1152,11 @@ class WaveManager {
       }
     }
 
-    // Random boss: 20% chance per wave starting wave 10, only one boss at a time
+    // Boss waves: guaranteed on wave 10, then every 5th wave (15, 20, 25…),
+    // plus a 15% random chance on any other wave ≥10 for surprise appearances.
     this.pendingBoss = null;
-    if (this.wave >= 10 && Math.random() < 0.20) {
+    const isBossWave = this.wave >= 10 && (this.wave % 5 === 0 || Math.random() < 0.15);
+    if (isBossWave) {
       this.pendingBoss = BOSS_TYPES[Math.floor(Math.random() * BOSS_TYPES.length)];
     }
     this.overtime = false;

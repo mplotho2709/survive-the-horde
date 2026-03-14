@@ -625,7 +625,7 @@ class EnemyBullet {
     this.vy   = Math.sin(angle) * spd;
     this.r    = 5;
     this.damage = 12;
-    this.life   = 180;
+    this.life   = 99999;
     this.dead   = false;
   }
 
@@ -1235,7 +1235,7 @@ const Game = {
         b.dead = true;
       }
     }
-    this.enemyBullets = this.enemyBullets.filter(b => !b.dead);
+    this.enemyBullets = this.enemyBullets.filter(b => !b.dead && dist(b, this.player) < Math.max(W, H) * 2);
 
     // Update bullets
     for (const b of this.bullets) b.update();

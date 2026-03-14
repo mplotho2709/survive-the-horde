@@ -798,17 +798,14 @@ class WaveManager {
     const screenScale  = Math.sqrt((W * H) / (900 * 600));
     this.spawnInterval = Math.max(25, Math.round((120 - (this.wave - 1) * 5) / screenScale));
 
-    // Schedule elites evenly through every 3rd round
+    // Spawn all elites at the very start of every 3rd round so the player
+    // has the full round to kill them before the sweep clears remaining enemies.
     this.eliteQueue = [];
     if (this.wave % 3 === 0) {
       const count = Math.floor(this.wave / 3);
       for (let i = 0; i < count; i++) {
-        // Spread from 20% to 80% through the round
-        const frac = count === 1 ? 0.5 : 0.2 + 0.6 * (i / (count - 1));
-        this.eliteQueue.push(Math.floor(this.roundDuration * (1 - frac)));
+        this.eliteQueue.push(this.roundDuration); // triggers on frame 1
       }
-      // Sort descending so we pop the earliest ones first as timer counts down
-      this.eliteQueue.sort((a, b) => b - a);
     }
   }
 

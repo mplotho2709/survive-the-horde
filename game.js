@@ -165,12 +165,16 @@ class Player {
     // Regeneration
     if (this.regenRate > 0) this.hp = Math.min(this.maxHp, this.hp + this.regenRate);
 
-    // Aim toward closest enemy
+    // Aim toward highest-threat enemy
     if (enemies.length > 0) {
-      let closest = enemies.reduce((best, e) =>
-        dist(this, e) < dist(this, best) ? e : best, enemies[0]);
-      this.aimAngle = Math.atan2(closest.y - this.y, closest.x - this.x);
-      this.closestEnemy = closest;
+      const candidates = enemies.length > 12
+        ? enemies.slice().sort((a, b) => dist(this, a) - dist(this, b)).slice(0, 12)
+        : enemies;
+      let best = candidates.reduce((a, b) =>
+        this._threatScore(a, candidates) < this._threatScore(b, candidates) ? a : b
+      );
+      this.aimAngle = Math.atan2(best.y - this.y, best.x - this.x);
+      this.closestEnemy = best;
     } else {
       this.closestEnemy = null;
     }
@@ -184,6 +188,39 @@ class Player {
       this.activePowerups[type]--;
       if (this.activePowerups[type] <= 0) delete this.activePowerups[type];
     }
+  }
+
+  _threatScore(enemy, allEnemies) {
+    // Type weight — higher = more threatening = lower effective distance
+    let typeWeight = 1.0;
+    if (enemy.type === 'shooter')                                  typeWeight = 3.0;
+    else if (enemy.type === 'charger' && enemy.chargeState === 'windup') typeWeight = 2.5;
+    else if (enemy.type === 'elite')                               typeWeight = 1.8;
+    else if (enemy.type === 'heavy')                               typeWeight = 1.2;
+
+    // Blocker penalty — skip if player has pierce (bullets travel through)
+    let blockerPenalty = 1.0;
+    if (this.pierce <= 1) {
+      const d  = dist(this, enemy);
+      const ex = (enemy.x - this.x) / d;
+      const ey = (enemy.y - this.y) / d;
+      let blockers = 0;
+      for (const other of allEnemies) {
+        if (other === enemy) continue;
+        const od = dist(this, other);
+        if (od >= d) continue;                      // only count enemies closer than target
+        const ox = other.x - this.x;
+        const oy = other.y - this.y;
+        const proj = ox * ex + oy * ey;             // projection onto aim line
+        if (proj <= 0) continue;
+        const perp = Math.abs(ox * ey - oy * ex);  // perpendicular distance from aim line
+        if (perp < other.r + 4) blockers++;         // within enemy radius of the path
+      }
+      blockerPenalty = 1 + blockers * 0.7;
+    }
+
+    return dist(this, enemy) / typeWeight * blockerPenalty;
+    // lower score = higher priority target
   }
 
   tryFire(bullets) {
@@ -640,8 +677,6 @@ class EnemyBullet {
 
   draw() {
     ctx.save();
-    ctx.shadowColor = '#e74c3c';
-    ctx.shadowBlur  = 8;
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
     ctx.fillStyle = '#c0392b';
@@ -1113,8 +1148,6 @@ class XpOrb {
     const alpha = this.lifetime < 180 ? this.lifetime / 180 : 1;
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.shadowColor = this.glow;
-    ctx.shadowBlur = 8;
     ctx.beginPath();
     ctx.arc(this.x, this.y, 5, 0, Math.PI * 2);
     ctx.fillStyle = this.color;
@@ -1132,45 +1165,6 @@ class XpOrb {
   }
 }
 
-// ── EliteOrb ───────────────────────────────────────────────────────────────
-class EliteOrb {
-  constructor(x, y) {
-    this.x = x;
-    this.y = y;
-    this.pulse = 0;
-    this.dead = false;
-  }
-
-  update() {
-    this.pulse += 0.07;
-  }
-
-  draw() {
-    const glow = 12 + Math.sin(this.pulse) * 6;
-    ctx.save();
-    ctx.shadowColor = '#f1c40f';
-    ctx.shadowBlur = glow;
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, 9, 0, Math.PI * 2);
-    ctx.fillStyle = '#9a7d0a';
-    ctx.fill();
-    ctx.strokeStyle = '#f1c40f';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    // White center
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, 3, 0, Math.PI * 2);
-    ctx.fillStyle = '#fff';
-    ctx.fill();
-    // Label
-    ctx.fillStyle = '#f1c40f';
-    ctx.font = 'bold 8px Courier New';
-    ctx.textAlign = 'center';
-    ctx.fillText('★', this.x, this.y - 14);
-    ctx.restore();
-  }
-}
 
 // ── XP values & orb colors per enemy type ─────────────────────────────────
 // Color reflects XP value: green=1, blue=2, gold=4
@@ -1198,6 +1192,21 @@ function rollRarity(luck) {
   const roll = Math.random();
   if (roll < rareChance)                  return 'rare';
   if (roll < rareChance + uncommonChance) return 'uncommon';
+  return 'common';
+}
+
+function rollChestRarity(wave, luck) {
+  // Each tier unlocks gradually; luck provides a small bonus
+  // legendary: 0% until wave 8, then +2%/wave, cap 12%
+  const legendaryChance = Math.max(0, Math.min(0.12, (wave - 7) * 0.02 + luck * 0.01));
+  // rare: 0% until wave 5, then +4%/wave, cap 25%
+  const rareChance      = Math.max(0, Math.min(0.25, (wave - 4) * 0.04 + luck * 0.02));
+  // uncommon: 0% until wave 3, then +8%/wave, cap 40%
+  const uncommonChance  = Math.max(0, Math.min(0.40, (wave - 2) * 0.08 + luck * 0.03));
+  const roll = Math.random();
+  if (roll < legendaryChance)                                         return 'legendary';
+  if (roll < legendaryChance + rareChance)                            return 'rare';
+  if (roll < legendaryChance + rareChance + uncommonChance)           return 'uncommon';
   return 'common';
 }
 
@@ -1359,7 +1368,6 @@ const Game = {
   bullets: [],
   particles: [],
   xpOrbs: [],
-  eliteOrbs: [],
   waveManager: null,
   score: 0,
   finalWave: 1,
@@ -1367,6 +1375,9 @@ const Game = {
   levelUpReason: 'level',   // 'level' | 'wave'
   waveUpgradeForWave: 0,    // tracks which wave already gave its upgrade
   showStats: false,
+  upgradeHistory: [],
+  mouseX: 0,
+  mouseY: 0,
   selectedWeaponIndex: 0,
 
   init() {
@@ -1375,7 +1386,6 @@ const Game = {
     this.bullets        = [];
     this.particles      = [];
     this.xpOrbs         = [];
-    this.eliteOrbs      = [];
     this.enemyBullets   = [];
     this.powerups       = [];
     this.chests         = [];
@@ -1386,6 +1396,7 @@ const Game = {
     this.levelUpReason     = 'level';
     this.waveUpgradeForWave = 0;
     this.showStats         = false;
+    this.upgradeHistory    = [];
   },
 
   start() {
@@ -1394,8 +1405,8 @@ const Game = {
   },
 
   _pickItems(n) {
-    const r = Math.random();
-    const rarity = r < 0.03 ? 'legendary' : r < 0.13 ? 'rare' : r < 0.40 ? 'uncommon' : 'common';
+    const wave   = this.waveManager ? this.waveManager.wave : 1;
+    const rarity = rollChestRarity(wave, this.player.luck);
     this.chestRarity = rarity;
 
     // Fill slots with rolled rarity, fall back to lower rarities if needed
@@ -1436,6 +1447,15 @@ const Game = {
     } else {
       upgrade.apply(this.player, upgrade.amount);
     }
+    this.upgradeHistory.push({
+      name:        upgrade.name,
+      icon:        upgrade.icon,
+      desc:        upgrade.desc,
+      tradeoff:    upgrade._isItem ? (upgrade.tradeoff || null) : null,
+      rarityColor: upgrade._isItem ? ITEM_RARITY[upgrade.rarity].color : upgrade.rarityColor,
+      rarityLabel: upgrade._isItem ? ITEM_RARITY[upgrade.rarity].label : upgrade.rarityLabel,
+      _isItem:     upgrade._isItem || false,
+    });
     this.player.levelUpFlash = 60;
     this.levelUpChoices = [];
     this.state = STATES.PLAYING;
@@ -1459,6 +1479,7 @@ const Game = {
         }
       }
       this.enemies = [];
+      this.enemyBullets = [];
     }
 
     // Update enemies
@@ -1515,7 +1536,7 @@ const Game = {
           this.particles.push(new Particle(e.x, e.y, colors[e.type]));
         }
         if (e.type === 'elite') {
-          this.eliteOrbs.push(new EliteOrb(e.x, e.y));
+          this.chests.push(new Chest(e.x, e.y));
         } else {
           const cfg = XP_ORB_CONFIG[e.type];
           this.xpOrbs.push(new XpOrb(e.x, e.y, cfg.value, cfg.color, cfg.glow));
@@ -1553,19 +1574,6 @@ const Game = {
     }
     this.xpOrbs = this.xpOrbs.filter(o => !o.dead);
 
-    // Update elite orbs — collecting one opens the upgrade screen
-    for (const orb of this.eliteOrbs) {
-      orb.update();
-      if (!orb.dead && dist(orb, this.player) < XP_PICKUP_RADIUS) {
-        orb.dead = true;
-        this.levelUpReason  = 'elite';
-        this.levelUpChoices = this._pickUpgrades(3);
-        this.state = STATES.LEVEL_UP;
-        break;
-      }
-    }
-    this.eliteOrbs = this.eliteOrbs.filter(o => !o.dead);
-
     // Update floor powerups and check pickup
     for (const pu of this.powerups) {
       pu.update();
@@ -1594,6 +1602,9 @@ const Game = {
     // Update particles
     for (const p of this.particles) p.update();
     this.particles = this.particles.filter(p => !p.dead);
+    if (this.particles.length > 300) this.particles.splice(0, this.particles.length - 300);
+    if (this.xpOrbs.length > 150) this.xpOrbs.splice(0, this.xpOrbs.length - 150);
+    if (this.enemyBullets.length > 200) this.enemyBullets.splice(0, this.enemyBullets.length - 200);
 
     // Check level-up
     if (this.player.pendingLevelUp) {
@@ -1650,14 +1661,17 @@ const Game = {
     ctx.save();
     ctx.translate(-camX, -camY);
 
-    for (const p of this.particles) p.draw();
-    for (const o of this.xpOrbs)    o.draw();
-    for (const o of this.eliteOrbs) o.draw();
-    for (const p of this.powerups)  p.draw();
-    for (const c of this.chests)    c.draw();
-    for (const b of this.bullets)       b.draw();
-    for (const b of this.enemyBullets)  b.draw();
-    for (const e of this.enemies)       e.draw();
+    const inView = (x, y, margin = 40) =>
+      x > camX - margin && x < camX + W + margin &&
+      y > camY - margin && y < camY + H + margin;
+
+    for (const p of this.particles)     { if (inView(p.x, p.y)) p.draw(); }
+    for (const o of this.xpOrbs)        { if (inView(o.x, o.y)) o.draw(); }
+    for (const p of this.powerups)      { if (inView(p.x, p.y)) p.draw(); }
+    for (const c of this.chests)        { if (inView(c.x, c.y)) c.draw(); }
+    for (const b of this.bullets)       { if (inView(b.x, b.y)) b.draw(); }
+    for (const b of this.enemyBullets)  { if (inView(b.x, b.y)) b.draw(); }
+    for (const e of this.enemies)       { if (inView(e.x, e.y, e.r)) e.draw(); }
     this.player.draw();
 
     ctx.restore();
@@ -1790,23 +1804,24 @@ const Game = {
     const p = this.player;
     const pw = 220, pad = 16;
     const px = W - pw - 10;
+    const minCD = Math.max(4, p.baseFireCD - Math.floor(p.baseFireCD * 0.4));
     const rows = [
       { label: 'Weapon',      value: p.weapon.name },
       { label: 'Level',       value: p.level },
-      { label: 'Luck',        value: `${p.luck} / 5` },
+      { label: 'Luck',        value: p.luck, max: 5, maxed: p.luck >= 5 },
       null,
-      { label: 'Move Speed',  value: p.moveSpeed.toFixed(1) },
-      { label: 'Fire Cooldown', value: `${p.fireCooldownMax} frames` },
-      { label: 'Damage',      value: p.bulletDamage },
-      { label: 'Proj. Size',  value: p.bulletSize },
-      { label: 'Range',       value: `${p.bulletLifetime} frames` },
+      { label: 'Move Speed',  value: p.moveSpeed.toFixed(1), max: '6.0', maxed: p.moveSpeed >= 6 },
+      { label: 'Fire CD',     value: `${p.fireCooldownMax}f`, max: `${minCD}f`, maxed: p.fireCooldownMax <= minCD },
+      { label: 'Damage',      value: p.bulletDamage.toFixed(1), max: p.weapon.maxDamage.toFixed(1), maxed: p.bulletDamage >= p.weapon.maxDamage },
+      { label: 'Proj. Size',  value: p.bulletSize, max: p.weapon.maxBulletSize, maxed: p.bulletSize >= p.weapon.maxBulletSize },
+      { label: 'Range',       value: `${p.bulletLifetime}f`, max: `${p.weapon.maxBulletLifetime}f`, maxed: p.bulletLifetime >= p.weapon.maxBulletLifetime },
       { label: 'Pierce',      value: p.pierce ? 'Yes' : 'No' },
-      { label: 'Regen',       value: `${p.regenRate.toFixed(2)} HP/f` },
-      { label: 'Evasion',     value: `${Math.round(p.evasion * 100)}%` },
-      { label: 'Armor',       value: p.armor },
-      { label: 'Crit Chance', value: `${Math.round(p.critChance * 100)}%` },
-      { label: 'Lifesteal',   value: `${Math.round(p.lifesteal * 100)}%` },
-      { label: 'Thorns',      value: `${p.thorns.toFixed(1)} dmg/f` },
+      { label: 'Regen',       value: p.regenRate.toFixed(2), max: '0.20', maxed: p.regenRate >= 0.20 },
+      { label: 'Evasion',     value: `${Math.round(p.evasion * 100)}%`, max: '75%', maxed: p.evasion >= 0.75 },
+      { label: 'Armor',       value: p.armor, max: 15, maxed: p.armor >= 15 },
+      { label: 'Crit Chance', value: `${Math.round(p.critChance * 100)}%`, max: '75%', maxed: p.critChance >= 0.75 },
+      { label: 'Lifesteal',   value: `${Math.round(p.lifesteal * 100)}%`, max: '60%', maxed: p.lifesteal >= 0.60 },
+      { label: 'Thorns',      value: p.thorns.toFixed(1), max: '3.0', maxed: p.thorns >= 3.0 },
       null,
       { label: 'HP',          value: `${Math.ceil(p.hp)} / ${p.maxHp}` },
     ];
@@ -1832,15 +1847,27 @@ const Game = {
 
     // Rows
     let ry = py + pad + rowH;
+    ctx.font = '12px Courier New';
     for (const row of rows) {
       if (row === null) { ry += rowH * 0.4; continue; }
       ctx.fillStyle = '#7f8c8d';
-      ctx.font = '12px Courier New';
       ctx.textAlign = 'left';
       ctx.fillText(row.label, px + pad, ry);
-      ctx.fillStyle = '#ecf0f1';
-      ctx.textAlign = 'right';
-      ctx.fillText(row.value, px + pw - pad, ry);
+      if (row.max !== undefined) {
+        // Draw " / max" in gray, right-aligned
+        const maxPart = ` / ${row.max}`;
+        ctx.fillStyle = '#7f8c8d';
+        ctx.textAlign = 'right';
+        ctx.fillText(maxPart, px + pw - pad, ry);
+        // Draw current value to the left of it
+        const maxPartW = ctx.measureText(maxPart).width;
+        ctx.fillStyle = row.maxed ? '#f1c40f' : '#ecf0f1';
+        ctx.fillText(String(row.value), px + pw - pad - maxPartW, ry);
+      } else {
+        ctx.fillStyle = '#ecf0f1';
+        ctx.textAlign = 'right';
+        ctx.fillText(String(row.value), px + pw - pad, ry);
+      }
       ry += rowH;
     }
   },
@@ -1853,14 +1880,12 @@ const Game = {
     // Title
     ctx.textAlign = 'center';
     const isWave  = this.levelUpReason === 'wave';
-    const isElite = this.levelUpReason === 'elite';
     const isChest = this.levelUpReason === 'chest';
     const chestRarityInfo = ITEM_RARITY[this.chestRarity || 'common'];
-    const titleText = isElite ? 'ELITE DEFEATED!'
-      : isWave  ? `ROUND ${this.waveManager.wave - 1} COMPLETE!`
+    const titleText = isWave  ? `ROUND ${this.waveManager.wave - 1} COMPLETE!`
       : isChest ? `${chestRarityInfo.label.toUpperCase()} CHEST FOUND!`
       : `LEVEL UP!  →  ${this.player.level}`;
-    const titleColor = isElite ? '#f1c40f' : isWave ? '#2ecc71' : isChest ? chestRarityInfo.color : '#f1c40f';
+    const titleColor = isWave ? '#2ecc71' : isChest ? chestRarityInfo.color : '#f1c40f';
 
     ctx.fillStyle = titleColor;
     ctx.font = 'bold 38px Courier New';
@@ -1874,12 +1899,11 @@ const Game = {
     ctx.fillText('Choose an upgrade  (click or press 1 / 2 / 3)', W / 2, 162);
 
     // Cards
-    const cardW = 220, cardH = 200, gap = 24;
+    const cardW = 220, gap = 24;
+    const cardH = isChest ? 230 : 200;
     const totalW = 3 * cardW + 2 * gap;
     const startX = (W - totalW) / 2;
     const cardY = 195;
-
-    const cardH = isChest ? 230 : 200;
     this.levelUpChoices.forEach((upg, i) => {
       const cx  = startX + i * (cardW + gap);
       const rc   = upg._isItem ? ITEM_RARITY[upg.rarity].color : upg.rarityColor;
@@ -1936,6 +1960,224 @@ const Game = {
 
       upg._cardX = cx; upg._cardY = cardY; upg._cardW = cardW; upg._cardH = cardH;
     });
+
+    this.drawUpgradeStats(cardY + cardH + 16);
+    this.drawUpgradeHistory();
+  },
+
+  drawUpgradeHistory() {
+    const history = this.upgradeHistory;
+    if (history.length === 0) return;
+
+    const pw = 215, pad = 10, rowH = 26;
+    const px = W - pw - 8;
+    const py = 8;
+    const titleH = 28;
+    const maxVisible = Math.floor((H - py - titleH - pad) / rowH);
+    // Show most-recent entries that fit; oldest first within the visible window
+    const start = Math.max(0, history.length - maxVisible);
+    const visible = history.slice(start);
+    const panelH = titleH + visible.length * rowH + pad;
+
+    // Background
+    ctx.fillStyle = 'rgba(10,10,24,0.88)';
+    roundRect(ctx, px, py, pw, panelH, 8);
+    ctx.fill();
+    ctx.strokeStyle = '#3a3a5a';
+    ctx.lineWidth = 1;
+    roundRect(ctx, px, py, pw, panelH, 8);
+    ctx.stroke();
+
+    // Title
+    ctx.font = 'bold 12px Courier New';
+    ctx.fillStyle = '#f1c40f';
+    ctx.textAlign = 'center';
+    ctx.fillText('PICKED UPGRADES', px + pw / 2, py + 17);
+
+    // Divider
+    ctx.strokeStyle = '#333';
+    ctx.beginPath();
+    ctx.moveTo(px + pad, py + titleH - 2);
+    ctx.lineTo(px + pw - pad, py + titleH - 2);
+    ctx.stroke();
+
+    let hoveredEntry = null;
+    let hoveredRowY  = 0;
+    const mx = this.mouseX, my = this.mouseY;
+
+    visible.forEach((entry, i) => {
+      const ry = py + titleH + i * rowH + rowH / 2 + 4;
+      const rowTop = py + titleH + i * rowH;
+
+      const hovered = mx >= px && mx <= px + pw && my >= rowTop && my < rowTop + rowH;
+      if (hovered) { hoveredEntry = entry; hoveredRowY = rowTop + rowH / 2; }
+
+      // Row hover highlight
+      if (hovered) {
+        ctx.fillStyle = 'rgba(255,255,255,0.07)';
+        ctx.fillRect(px + 2, rowTop, pw - 4, rowH);
+      }
+
+      // Icon
+      ctx.font = '13px Courier New';
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#ecf0f1';
+      ctx.fillText(entry.icon, px + 8, ry);
+
+      // Name (truncate if too long)
+      ctx.font = '12px Courier New';
+      ctx.fillStyle = entry.rarityColor;
+      const maxNameW = pw - 70;
+      let name = entry.name;
+      while (name.length > 3 && ctx.measureText(name).width > maxNameW) name = name.slice(0, -1);
+      if (name !== entry.name) name += '…';
+      ctx.fillText(name, px + 26, ry);
+
+      // Rarity label (right-aligned, small)
+      ctx.font = '9px Courier New';
+      ctx.fillStyle = entry.rarityColor;
+      ctx.textAlign = 'right';
+      ctx.fillText(entry.rarityLabel.toUpperCase(), px + pw - 6, ry);
+    });
+
+    // "… N more" indicator when history is longer than visible window
+    if (start > 0) {
+      ctx.font = '10px Courier New';
+      ctx.fillStyle = '#7f8c8d';
+      ctx.textAlign = 'center';
+      ctx.fillText(`▲ ${start} earlier`, px + pw / 2, py + titleH + 10);
+    }
+
+    // Tooltip for hovered row
+    if (hoveredEntry) {
+      this._drawHistoryTooltip(hoveredEntry, px - 8, hoveredRowY);
+    }
+  },
+
+  _drawHistoryTooltip(entry, rightX, centerY) {
+    const tw = 210, pad = 10;
+    const hasTradeoff = !!entry.tradeoff;
+    const th = 90 + (hasTradeoff ? 24 : 0);
+    const tx = rightX - tw;
+    const ty = Math.max(4, Math.min(H - th - 4, centerY - th / 2));
+
+    // Background + border
+    ctx.fillStyle = 'rgba(8,8,20,0.97)';
+    roundRect(ctx, tx, ty, tw, th, 7);
+    ctx.fill();
+    ctx.strokeStyle = entry.rarityColor;
+    ctx.lineWidth = 2;
+    roundRect(ctx, tx, ty, tw, th, 7);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+
+    // Icon
+    ctx.font = '24px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ecf0f1';
+    ctx.fillText(entry.icon, tx + tw / 2, ty + 28);
+
+    // Name
+    ctx.font = 'bold 13px Courier New';
+    ctx.fillStyle = entry.rarityColor;
+    ctx.fillText(entry.name, tx + tw / 2, ty + 47);
+
+    // Rarity label
+    ctx.font = '10px Courier New';
+    ctx.fillStyle = entry.rarityColor;
+    ctx.fillText(entry.rarityLabel.toUpperCase(), tx + tw / 2, ty + 60);
+
+    // Desc
+    ctx.fillStyle = '#bdc3c7';
+    ctx.font = '11px Courier New';
+    wrapText(entry.desc, tx + tw / 2, ty + 74, tw - 16, 13);
+
+    // Tradeoff
+    if (hasTradeoff) {
+      ctx.fillStyle = '#e74c3c';
+      ctx.font = '10px Courier New';
+      ctx.fillText('⚠ ' + entry.tradeoff, tx + tw / 2, ty + th - 10);
+    }
+  },
+
+  drawUpgradeStats(panelY) {
+    const p = this.player;
+    const cardW = 220, gap = 24;
+    const panelW = 3 * cardW + 2 * gap; // 708 — same width as cards
+    const px = (W - panelW) / 2;
+    const pad = 14, rowH = 24;
+    const colW = (panelW - 2 * pad - gap) / 2;
+    const minCD = Math.max(4, p.baseFireCD - Math.floor(p.baseFireCD * 0.4));
+    const panelH = 28 + 6 * rowH + pad;
+
+    // Background
+    ctx.fillStyle = 'rgba(10,10,24,0.82)';
+    roundRect(ctx, px, panelY, panelW, panelH, 8);
+    ctx.fill();
+    ctx.strokeStyle = '#3a3a5a';
+    ctx.lineWidth = 1;
+    roundRect(ctx, px, panelY, panelW, panelH, 8);
+    ctx.stroke();
+
+    // Header
+    ctx.font = 'bold 13px Courier New';
+    ctx.fillStyle = '#f1c40f';
+    ctx.textAlign = 'left';
+    ctx.fillText('PLAYER STATS', px + pad, panelY + 17);
+    ctx.fillStyle = '#95a5a6';
+    ctx.textAlign = 'right';
+    ctx.fillText(
+      `${p.weapon.name}  ·  Lv ${p.level}  ·  Luck ${p.luck}/5  ·  HP ${Math.ceil(p.hp)}/${p.maxHp}`,
+      px + panelW - pad, panelY + 17
+    );
+
+    // Divider
+    const divY = panelY + 24;
+    ctx.strokeStyle = '#333';
+    ctx.beginPath(); ctx.moveTo(px + pad, divY); ctx.lineTo(px + panelW - pad, divY); ctx.stroke();
+
+    const leftStats = [
+      { label: 'Move Speed', value: p.moveSpeed.toFixed(1),         max: '6.0',                              maxed: p.moveSpeed >= 6 },
+      { label: 'Fire CD',    value: `${p.fireCooldownMax}f`,         max: `${minCD}f`,                        maxed: p.fireCooldownMax <= minCD },
+      { label: 'Damage',     value: p.bulletDamage.toFixed(1),       max: p.weapon.maxDamage.toFixed(1),      maxed: p.bulletDamage >= p.weapon.maxDamage },
+      { label: 'Proj. Size', value: p.bulletSize,                    max: p.weapon.maxBulletSize,             maxed: p.bulletSize >= p.weapon.maxBulletSize },
+      { label: 'Range',      value: `${p.bulletLifetime}f`,          max: `${p.weapon.maxBulletLifetime}f`,   maxed: p.bulletLifetime >= p.weapon.maxBulletLifetime },
+      { label: 'Pierce',     value: p.pierce ? 'Yes' : 'No' },
+    ];
+    const rightStats = [
+      { label: 'Regen',      value: p.regenRate.toFixed(2),          max: '0.20',  maxed: p.regenRate >= 0.20 },
+      { label: 'Evasion',    value: `${Math.round(p.evasion * 100)}%`, max: '75%', maxed: p.evasion >= 0.75 },
+      { label: 'Armor',      value: p.armor,                         max: 15,      maxed: p.armor >= 15 },
+      { label: 'Crit',       value: `${Math.round(p.critChance * 100)}%`, max: '75%', maxed: p.critChance >= 0.75 },
+      { label: 'Lifesteal',  value: `${Math.round(p.lifesteal * 100)}%`, max: '60%', maxed: p.lifesteal >= 0.60 },
+      { label: 'Thorns',     value: p.thorns.toFixed(1),             max: '3.0',   maxed: p.thorns >= 3.0 },
+    ];
+
+    const renderCol = (stats, colX) => {
+      ctx.font = '14px Courier New';
+      let ry = divY + rowH;
+      for (const row of stats) {
+        ctx.fillStyle = '#7f8c8d';
+        ctx.textAlign = 'left';
+        ctx.fillText(row.label, colX, ry);
+        if (row.max !== undefined) {
+          const maxPart = ` / ${row.max}`;
+          ctx.fillStyle = '#7f8c8d';
+          ctx.textAlign = 'right';
+          ctx.fillText(maxPart, colX + colW, ry);
+          ctx.fillStyle = row.maxed ? '#f1c40f' : '#ecf0f1';
+          ctx.fillText(String(row.value), colX + colW - ctx.measureText(maxPart).width, ry);
+        } else {
+          ctx.fillStyle = '#ecf0f1';
+          ctx.textAlign = 'right';
+          ctx.fillText(String(row.value), colX + colW, ry);
+        }
+        ry += rowH;
+      }
+    };
+
+    renderCol(leftStats,  px + pad);
+    renderCol(rightStats, px + pad + colW + gap);
   },
 
   drawMenu() {
@@ -2255,6 +2497,12 @@ canvas.addEventListener('click', e => {
   const mx = e.clientX - rect.left;
   const my = e.clientY - rect.top;
   Game.handleClick(mx, my);
+});
+
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  Game.mouseX = e.clientX - rect.left;
+  Game.mouseY = e.clientY - rect.top;
 });
 
 // ── Main loop ──────────────────────────────────────────────────────────────

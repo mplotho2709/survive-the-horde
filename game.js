@@ -471,13 +471,21 @@ class Player {
   draw() {
     // Shield aura
     if (this.hasPowerup('shield')) {
-      ctx.save();
-      ctx.globalAlpha = 0.5 + Math.sin(Date.now() * 0.01) * 0.3;
-      ctx.shadowColor = '#3498db';
-      ctx.shadowBlur = 20;
-      ctx.strokeStyle = '#85c1e9';
-      ctx.lineWidth = 3;
+      const pulse = Math.sin(Date.now() * 0.01) * 0.5 + 0.5;
       const _sr = this.r + 10;
+      ctx.save();
+      // Soft circular glow ring via radial gradient
+      const sg = ctx.createRadialGradient(this.x, this.y, _sr - 8, this.x, this.y, _sr + 16);
+      sg.addColorStop(0,   'rgba(52,152,219,0)');
+      sg.addColorStop(0.4, `rgba(52,152,219,${0.5 + pulse * 0.35})`);
+      sg.addColorStop(1,   'rgba(52,152,219,0)');
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, _sr + 16, 0, Math.PI * 2);
+      ctx.fillStyle = sg;
+      ctx.fill();
+      // Crisp pixel border on top
+      ctx.globalAlpha = 0.55 + pulse * 0.3;
+      ctx.fillStyle = '#85c1e9';
       ctx.fillRect(this.x - _sr, this.y - _sr, _sr * 2, 2);
       ctx.fillRect(this.x - _sr, this.y + _sr - 2, _sr * 2, 2);
       ctx.fillRect(this.x - _sr, this.y - _sr, 2, _sr * 2);
@@ -500,13 +508,22 @@ class Player {
 
     // Level-up aura
     if (this.levelUpFlash > 0) {
-      ctx.save();
-      ctx.globalAlpha = this.levelUpFlash / 60;
-      ctx.shadowColor = '#f1c40f';
-      ctx.shadowBlur = 20;
-      ctx.strokeStyle = '#f1c40f';
-      ctx.lineWidth = 3;
+      const progress = this.levelUpFlash / 60;
       const _lr = this.r + 8;
+      ctx.save();
+      // Expanding radial burst
+      const lg = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, _lr + 22);
+      lg.addColorStop(0,   'rgba(241,196,15,0)');
+      lg.addColorStop(0.5, `rgba(241,196,15,${progress * 0.45})`);
+      lg.addColorStop(0.8, `rgba(241,196,15,${progress * 0.7})`);
+      lg.addColorStop(1,   'rgba(241,196,15,0)');
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, _lr + 22, 0, Math.PI * 2);
+      ctx.fillStyle = lg;
+      ctx.fill();
+      // Crisp pixel border
+      ctx.globalAlpha = progress;
+      ctx.fillStyle = '#f1c40f';
       ctx.fillRect(this.x - _lr, this.y - _lr, _lr * 2, 2);
       ctx.fillRect(this.x - _lr, this.y + _lr - 2, _lr * 2, 2);
       ctx.fillRect(this.x - _lr, this.y - _lr, 2, _lr * 2);
@@ -724,17 +741,19 @@ class Enemy {
     drawSprite(ZOMBIE_SPRITES.shooter, 3);
     ctx.restore();
 
-    // Muzzle flash indicator — small pulsing dot showing it can shoot
+    // Muzzle charge indicator — circular pulse showing it's about to shoot
     if (this.shootTimer < 25) {
       const pulse = 1 - this.shootTimer / 25;
+      const _mr = this.r + 5 + pulse * 8;
       ctx.save();
-      ctx.globalAlpha = pulse;
-      const _mr = Math.round(this.r + 5 + pulse * 6);
-      ctx.fillStyle = '#e74c3c';
-      ctx.fillRect(this.x - _mr, this.y - _mr, _mr * 2, 2);
-      ctx.fillRect(this.x - _mr, this.y + _mr - 2, _mr * 2, 2);
-      ctx.fillRect(this.x - _mr, this.y - _mr, 2, _mr * 2);
-      ctx.fillRect(this.x + _mr - 2, this.y - _mr, 2, _mr * 2);
+      const mg = ctx.createRadialGradient(this.x, this.y, _mr * 0.5, this.x, this.y, _mr + 10);
+      mg.addColorStop(0,   'rgba(231,76,60,0)');
+      mg.addColorStop(0.5, `rgba(231,76,60,${pulse * 0.55})`);
+      mg.addColorStop(1,   'rgba(231,76,60,0)');
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, _mr + 10, 0, Math.PI * 2);
+      ctx.fillStyle = mg;
+      ctx.fill();
       ctx.restore();
     }
 
@@ -759,22 +778,22 @@ class Enemy {
     drawSprite(isDash ? ZOMBIE_SPRITES.charger_dash : ZOMBIE_SPRITES.charger, 3);
     ctx.restore();
 
-    // Windup indicator: pulsing ring + arrow pointing at locked target
+    // Windup indicator: expanding circular glow + arrow pointing at locked target
     if (isWindup) {
       const progress  = 1 - this.chargeTimer / 70; // 0→1 as windup completes
-      const ringR     = this.r + 6 + progress * 10;
+      const ringR     = this.r + 6 + progress * 12;
       const alpha     = 0.4 + progress * 0.6;
 
       ctx.save();
-      ctx.globalAlpha = alpha;
-      // Expanding square ring
-      ctx.fillStyle = '#ff4500';
-      const _rr = Math.round(ringR);
-      const _rw = Math.max(1, Math.round(2 + progress * 3));
-      ctx.fillRect(this.x - _rr, this.y - _rr, _rr * 2, _rw);
-      ctx.fillRect(this.x - _rr, this.y + _rr - _rw, _rr * 2, _rw);
-      ctx.fillRect(this.x - _rr, this.y - _rr, _rw, _rr * 2);
-      ctx.fillRect(this.x + _rr - _rw, this.y - _rr, _rw, _rr * 2);
+      // Expanding circular glow ring
+      const cg = ctx.createRadialGradient(this.x, this.y, ringR - 10, this.x, this.y, ringR + 10);
+      cg.addColorStop(0,   'rgba(255,69,0,0)');
+      cg.addColorStop(0.5, `rgba(255,69,0,${alpha * 0.75})`);
+      cg.addColorStop(1,   'rgba(255,69,0,0)');
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, ringR + 10, 0, Math.PI * 2);
+      ctx.fillStyle = cg;
+      ctx.fill();
 
       // Arrow showing dash direction
       const ax   = this.x + Math.cos(this.dashAngle) * (this.r + 18 + progress * 10);
@@ -1291,6 +1310,18 @@ class Powerup {
 
     ctx.save();
     ctx.globalAlpha = alpha;
+
+    // Soft circular glow behind the box
+    const _pr = parseInt(cfg.color.slice(1,3),16);
+    const _pg = parseInt(cfg.color.slice(3,5),16);
+    const _pb = parseInt(cfg.color.slice(5,7),16);
+    const pg = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, sz * sc * 0.9);
+    pg.addColorStop(0, `rgba(${_pr},${_pg},${_pb},${0.35 + p * 0.25})`);
+    pg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, sz * sc * 0.9, 0, Math.PI * 2);
+    ctx.fillStyle = pg;
+    ctx.fill();
 
     // Dark interior fill
     ctx.fillStyle = '#120d0a';

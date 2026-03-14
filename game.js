@@ -1402,7 +1402,7 @@ const Game = {
     const order = ['legendary', 'rare', 'uncommon', 'common'];
     let pool = [], ri = order.indexOf(rarity);
     while (pool.length < n && ri < order.length) {
-      const avail = ITEMS.filter(it => it.rarity === order[ri] && !this.player.ownedItems.has(it.id));
+      const avail = ITEMS.filter(it => it.rarity === order[ri] && (it.rarity !== 'legendary' || !this.player.ownedItems.has(it.id)));
       pool = pool.concat(avail.sort(() => Math.random() - 0.5).slice(0, n - pool.length));
       ri++;
     }

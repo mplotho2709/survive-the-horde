@@ -426,7 +426,7 @@ class Player {
 
     // Blocker penalty — skip if player has pierce (bullets travel through)
     let blockerPenalty = 1.0;
-    if (this.pierce <= 1) {
+    if (this.pierce === 0) {
       const d  = dist(this, enemy);
       const ex = (enemy.x - this.x) / d;
       const ey = (enemy.y - this.y) / d;
@@ -811,7 +811,7 @@ class Enemy {
 
 // ── Bullet ─────────────────────────────────────────────────────────────────
 class Bullet {
-  constructor(x, y, angle, damage = 1, size = 4, pierce = false, speed = BULLET_SPEED, color = '#ffe082', lifetime = BULLET_LIFETIME) {
+  constructor(x, y, angle, damage = 1, size = 4, pierce = 0, speed = BULLET_SPEED, color = '#ffe082', lifetime = BULLET_LIFETIME) {
     this.x    = x;
     this.y    = y;
     this.vx   = Math.cos(angle) * speed;
@@ -819,9 +819,9 @@ class Bullet {
     this.life = lifetime;
     this.damage = damage;
     this.size   = size;
-    this.pierce = pierce;
+    this.pierceLeft = pierce;
     this.color  = color;
-    this.hitSet = pierce ? new Set() : null;
+    this.hitSet = pierce > 0 ? new Set() : null;
     this.dead = false;
   }
 
@@ -1574,8 +1574,8 @@ const ITEMS = [
     apply(p) { p.lifesteal += 0.20; p.regenRate += 0.07; p.bulletDamage = Math.max(0.1, p.bulletDamage * 0.75); } },
 
   { id: 'cluster_rounds',  rarity: 'rare', name: 'Cluster Rounds',     icon: '💥',
-    desc: 'Bullet size +5  ·  Grants Pierce', tradeoff: 'Fire rate −12 frames',
-    apply(p) { p.bulletSize += 5; p.pierce = true; p.fireCooldownBonus -= 12; } },
+    desc: 'Bullet size +5  ·  Pierce +1', tradeoff: 'Fire rate −12 frames',
+    apply(p) { p.bulletSize += 5; p.pierce += 1; p.fireCooldownBonus -= 12; } },
 
   { id: 'quicksilver',     rarity: 'rare', name: 'Quicksilver',        icon: '⚡',
     desc: 'Move Speed +2.0  ·  Evasion +18%', tradeoff: 'Armor −6',
@@ -1592,6 +1592,14 @@ const ITEMS = [
   { id: 'warlords_ring',   rarity: 'rare', name: "Warlord's Ring",     icon: '💍',
     desc: 'Damage +1.0  ·  Crit +20%  ·  Thorns +1.0', tradeoff: 'Regen −0.08/frame',
     apply(p) { p.bulletDamage += 1.0; p.critChance = Math.min(0.75, p.critChance + 0.20); p.thorns += 1.0; p.regenRate = Math.max(0, p.regenRate - 0.08); } },
+
+  { id: 'tungsten_core',   rarity: 'uncommon', name: 'Tungsten Core',     icon: '🔩',
+    desc: 'Pierce +1  ·  Bullets pass through one extra enemy', tradeoff: 'Damage −15%',
+    apply(p) { p.pierce += 1; p.bulletDamage = Math.max(0.1, p.bulletDamage * 0.85); } },
+
+  { id: 'railgun_slug',    rarity: 'legendary', name: 'Railgun Slug',      icon: '🛤',
+    desc: 'Pierce +3  ·  Bullet speed ×1.5', tradeoff: 'Fire rate −18 frames  ·  Damage −20%',
+    apply(p) { p.pierce += 3; p.bulletSpeed *= 1.5; p.fireCooldownBonus -= 18; p.bulletDamage = Math.max(0.1, p.bulletDamage * 0.80); } },
 
   // ── LEGENDARY (5) ─────────────────────────────────────────────────────────
   { id: 'berserkers_soul', rarity: 'legendary', name: "Berserker's Soul",  icon: '⚔',
@@ -1884,7 +1892,7 @@ const WEAPONS = [
     tag: 'Balanced all-rounder',
     statA: 'CD: 18  ·  DMG: 1.2',
     statB: 'Medium range',
-    fireCD: 18, damage: 1.2, bulletSize: 4, pierce: false,
+    fireCD: 18, damage: 1.2, bulletSize: 4, pierce: 0,
     burstCount: 1, spreadAngle: 0, bulletSpeed: BULLET_SPEED,
     bulletLifetime: 100, maxBulletLifetime: 200,
     maxDamage: 5,   maxBulletSize: 8,
@@ -1894,7 +1902,7 @@ const WEAPONS = [
     tag: 'Fast fire, short range',
     statA: 'CD: 8  ·  DMG: 0.5',
     statB: 'Short range',
-    fireCD: 8, damage: 0.5, bulletSize: 3, pierce: false,
+    fireCD: 8, damage: 0.5, bulletSize: 3, pierce: 0,
     burstCount: 1, spreadAngle: 0, bulletSpeed: BULLET_SPEED,
     bulletLifetime: 55, maxBulletLifetime: 110,
     maxDamage: 2.5, maxBulletSize: 6,
@@ -1904,7 +1912,7 @@ const WEAPONS = [
     tag: '5-pellet burst, close range',
     statA: 'CD: 42  ·  DMG: 1×5',
     statB: 'Very short range',
-    fireCD: 42, damage: 1, bulletSize: 3, pierce: false,
+    fireCD: 42, damage: 1, bulletSize: 3, pierce: 0,
     burstCount: 5, spreadAngle: 0.20, bulletSpeed: BULLET_SPEED,
     bulletLifetime: 38, maxBulletLifetime: 76,
     maxDamage: 2.5, maxBulletSize: 6,
@@ -1914,7 +1922,7 @@ const WEAPONS = [
     tag: 'Slow, high DMG, pierce',
     statA: 'CD: 55  ·  DMG: 4',
     statB: 'Very long range, pierce',
-    fireCD: 55, damage: 4, bulletSize: 3, pierce: true,
+    fireCD: 55, damage: 4, bulletSize: 3, pierce: 1,
     burstCount: 1, spreadAngle: 0, bulletSpeed: BULLET_SPEED * 2.2,
     bulletLifetime: 85, maxBulletLifetime: 170,
     maxDamage: 9,   maxBulletSize: 5,
@@ -1924,7 +1932,7 @@ const WEAPONS = [
     tag: 'Huge slow slug, pierce',
     statA: 'CD: 60  ·  DMG: 4',
     statB: 'Medium range, pierce',
-    fireCD: 60, damage: 4, bulletSize: 10, pierce: true,
+    fireCD: 60, damage: 4, bulletSize: 10, pierce: 1,
     burstCount: 1, spreadAngle: 0, bulletSpeed: BULLET_SPEED * 0.6,
     bulletLifetime: 130, maxBulletLifetime: 260,
     maxDamage: 9,   maxBulletSize: 14,
@@ -2165,8 +2173,9 @@ const Game = {
           for (let i = 0; i < 5; i++) {
             this.particles.push(new Particle(b.x, b.y, b.color));
           }
-          if (b.pierce) {
-            b.hitSet.add(e); // keep going through enemies
+          if (b.pierceLeft > 0) {
+            b.hitSet.add(e); // pass through this enemy, one pierce charge consumed
+            b.pierceLeft--;
           } else {
             b.dead = true;
             break;
@@ -2219,7 +2228,7 @@ const Game = {
             this.player.hp = Math.min(this.player.maxHp, this.player.hp + dmg * this.player.lifesteal);
           for (let i = 0; i < 3; i++)
             this.particles.push(new Particle(b.x, b.y, this.boss.accent));
-          if (!b.pierce) b.dead = true;
+          if (b.pierceLeft <= 0) b.dead = true;
         }
       }
 
@@ -2613,7 +2622,7 @@ const Game = {
       { label: 'Damage',      value: p.bulletDamage.toFixed(1), max: '—', maxed: false },
       { label: 'Proj. Size',  value: p.bulletSize, max: p.weapon.maxBulletSize, maxed: p.bulletSize >= p.weapon.maxBulletSize },
       { label: 'Range',       value: `${p.bulletLifetime}f`, max: `${p.weapon.maxBulletLifetime}f`, maxed: p.bulletLifetime >= p.weapon.maxBulletLifetime },
-      { label: 'Pierce',      value: p.pierce ? 'Yes' : 'No' },
+      { label: 'Pierce',      value: p.pierce > 0 ? p.pierce : 'No' },
       { label: 'Regen',       value: p.regenRate.toFixed(2), max: '0.20', maxed: p.regenRate >= 0.20 },
       { label: 'Evasion',     value: `${Math.round(p.evasion * 100)}%`, max: '50%', maxed: p.evasion >= 0.50 },
       { label: 'Armor',       value: p.armor, max: 15, maxed: p.armor >= 15 },
@@ -2940,7 +2949,7 @@ const Game = {
       { label: 'Damage',     value: p.bulletDamage.toFixed(1),       max: p.weapon.maxDamage.toFixed(1),      maxed: p.bulletDamage >= p.weapon.maxDamage },
       { label: 'Proj. Size', value: p.bulletSize,                    max: p.weapon.maxBulletSize,             maxed: p.bulletSize >= p.weapon.maxBulletSize },
       { label: 'Range',      value: `${p.bulletLifetime}f`,          max: `${p.weapon.maxBulletLifetime}f`,   maxed: p.bulletLifetime >= p.weapon.maxBulletLifetime },
-      { label: 'Pierce',     value: p.pierce ? 'Yes' : 'No' },
+      { label: 'Pierce',     value: p.pierce > 0 ? p.pierce : 'No' },
     ];
     const rightStats = [
       { label: 'Regen',      value: p.regenRate.toFixed(2),          max: '0.20',  maxed: p.regenRate >= 0.20 },
@@ -3041,7 +3050,7 @@ const Game = {
       ctx.fillStyle = '#a09080';
       ctx.font = '10px Courier New';
       ctx.fillText(wpn.statA, mid, cy + 66);
-      ctx.fillStyle = wpn.pierce ? '#c39bd3' : '#6a5a4e';
+      ctx.fillStyle = wpn.pierce > 0 ? '#c39bd3' : '#6a5a4e';
       ctx.fillText(wpn.statB, mid, cy + 80);
 
       // Store bounds for click detection

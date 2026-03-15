@@ -1376,8 +1376,8 @@ class WaveManager {
     this.spawnTimer       = 0;
     this.betweenWaveTimer = 0;
 
-    // Round duration: 20s wave 1, +7s per wave, cap 90s (reached ~wave 11)
-    const secs         = Math.min(90, 20 + (this.wave - 1) * 7);
+    // Round duration: 14s wave 1, +5s per wave, cap 60s (reached ~wave 11)
+    const secs         = Math.min(60, 14 + (this.wave - 1) * 5);
     this.roundDuration = secs * 60;
     this.roundTimer    = this.roundDuration;
 

@@ -1283,7 +1283,7 @@ const POWERUP_DROP_WEIGHTS = [
 const _DROP_TOTAL = POWERUP_DROP_WEIGHTS.reduce((s, [, w]) => s + w, 0);
 
 function rollPowerupDrop() {
-  if (Math.random() > 0.15) return null; // 15% base drop chance
+  if (Math.random() > 0.06) return null; // 6% base drop chance
   let r = Math.random() * _DROP_TOTAL;
   for (const [type, w] of POWERUP_DROP_WEIGHTS) {
     r -= w;
@@ -2230,7 +2230,7 @@ const Game = {
           this.xpOrbs.push(new XpOrb(e.x, e.y, cfg.value, cfg.color, cfg.glow));
           const drop = rollPowerupDrop();
           if (drop) this.powerups.push(new Powerup(e.x, e.y, drop));
-          if (Math.random() < 0.03) this.chests.push(new Chest(e.x + 20, e.y));
+          if (Math.random() < 0.01) this.chests.push(new Chest(e.x + 20, e.y));
         }
         this.score++;
         return false;

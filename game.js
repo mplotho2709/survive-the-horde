@@ -115,35 +115,75 @@ function drawSprite(pixels, scale) {
   }
 }
 
-// ── Player sprite definitions (8×8 grid, drawn at scale 4 = 32×32 px) ──────
-// Origin is top-left; center pixel = [4,4]. Cols 0-5 = shared body, 6+ = weapon barrel.
-const _PB = { h:'#5d4037', t:'#546e7a', s:'#ffcc80', l:'#37474f' }; // palette aliases
+// ── Player sprite definitions (7×12 body grid, drawn at scale 3 = 21×36 px) ─
+// Facing right (angle 0). Cols 0-6 = body; col 7+ = weapon barrel.
+// Translate offset: (-10, -15) to center torso on player position.
+const _PC = {
+  ho: '#1a2010',  // dark outline
+  hm: '#4e5f30',  // helmet olive
+  hl: '#687e42',  // helmet highlight
+  vi: '#0d1520',  // visor (near-black)
+  sk: '#c8906a',  // skin
+  vm: '#3a4e28',  // vest dark green
+  vl: '#526838',  // vest light green
+  gn: '#8a7a58',  // tan gear / pouches
+  gd: '#5c4e38',  // gear dark
+  ll: '#2a3020',  // legs dark
+  lm: '#3a4030',  // legs mid
+  bk: '#181810',  // boots
+};
 const _PLAYER_BODY = [
-  // Helmet rows 0-1
-  [1,0,_PB.h],[2,0,_PB.h],[3,0,_PB.h],[4,0,_PB.h],[5,0,_PB.h],
-  [1,1,_PB.h],[2,1,_PB.h],[3,1,_PB.h],[4,1,_PB.h],[5,1,_PB.h],
-  // Torso rows 2-4, arms (skin) at col 0 & 5
-  [0,2,_PB.s],[1,2,_PB.t],[2,2,_PB.t],[3,2,_PB.t],[4,2,_PB.t],[5,2,_PB.t],
-  [0,3,_PB.t],[1,3,_PB.t],[2,3,_PB.t],[3,3,_PB.t],[4,3,_PB.t],[5,3,_PB.t],
-  [0,4,_PB.t],[1,4,_PB.t],[2,4,_PB.t],[3,4,_PB.t],[4,4,_PB.t],[5,4,_PB.t],
-  [0,5,_PB.s],[1,5,_PB.t],[2,5,_PB.t],[3,5,_PB.t],[4,5,_PB.t],[5,5,_PB.s],
-  // Legs rows 6-7
-  [1,6,_PB.l],[2,6,_PB.l],[3,6,_PB.l],[4,6,_PB.l],
-  [1,7,_PB.l],[2,7,_PB.l],[3,7,_PB.l],[4,7,_PB.l],
+  // Row 0 — helmet crown (narrow)
+  [1,0,_PC.hm],[2,0,_PC.hm],[3,0,_PC.hm],[4,0,_PC.hm],[5,0,_PC.hm],
+  // Row 1 — helmet full width
+  [0,1,_PC.hm],[1,1,_PC.hl],[2,1,_PC.hl],[3,1,_PC.hl],[4,1,_PC.hl],[5,1,_PC.hl],[6,1,_PC.hm],
+  // Row 2 — helmet brim + visor slit
+  [0,2,_PC.ho],[1,2,_PC.hm],[2,2,_PC.vi],[3,2,_PC.vi],[4,2,_PC.vi],[5,2,_PC.hm],[6,2,_PC.ho],
+  // Row 3 — face / neck (skin)
+  [1,3,_PC.sk],[2,3,_PC.sk],[3,3,_PC.sk],[4,3,_PC.sk],[5,3,_PC.sk],
+  // Row 4 — upper torso: left shoulder pad, vest, right arm extended toward weapon
+  [0,4,_PC.gn],[1,4,_PC.vm],[2,4,_PC.vl],[3,4,_PC.vl],[4,4,_PC.vl],[5,4,_PC.vm],[6,4,_PC.sk],
+  // Row 5 — mid torso: ammo pouches on vest, right arm
+  [0,5,_PC.gn],[1,5,_PC.vm],[2,5,_PC.gn],[3,5,_PC.vl],[4,5,_PC.gn],[5,5,_PC.vm],[6,5,_PC.sk],
+  // Row 6 — lower torso
+  [0,6,_PC.ho],[1,6,_PC.vl],[2,6,_PC.vl],[3,6,_PC.vm],[4,6,_PC.vl],[5,6,_PC.vl],[6,6,_PC.ho],
+  // Row 7 — belt / gear strap
+  [1,7,_PC.vm],[2,7,_PC.gd],[3,7,_PC.gn],[4,7,_PC.gd],[5,7,_PC.vm],
+  // Rows 8-9 — upper & mid legs (gap at col 3 between legs)
+  [1,8,_PC.ll],[2,8,_PC.lm],[4,8,_PC.lm],[5,8,_PC.ll],
+  [1,9,_PC.ll],[2,9,_PC.lm],[4,9,_PC.lm],[5,9,_PC.ll],
+  // Rows 10-11 — boots
+  [1,10,_PC.bk],[2,10,_PC.bk],[4,10,_PC.bk],[5,10,_PC.bk],
+  [1,11,_PC.bk],[2,11,_PC.bk],[4,11,_PC.bk],[5,11,_PC.bk],
 ];
 function _playerSprite(barrelPixels) {
   return _PLAYER_BODY.concat(barrelPixels);
 }
-// Weapon barrel pixels at cols 6-7 (extend right, facing aim direction)
+// Weapon barrels extend right from col 7, at arm height (rows 4-5)
 const PLAYER_SPRITES = {
-  pistol:  _playerSprite([[6,3,'#ffe082'],[6,4,'#ffe082']]),
-  smg:     _playerSprite([[6,3,'#82e0aa'],[7,3,'#82e0aa'],[6,4,'#82e0aa'],[7,4,'#82e0aa']]),
-  shotgun: _playerSprite([[6,2,'#f0b27a'],[7,2,'#f0b27a'],[6,3,'#f0b27a'],[7,3,'#f0b27a'],
-                           [6,5,'#f0b27a'],[7,5,'#f0b27a'],[6,6,'#f0b27a'],[7,6,'#f0b27a']]),
-  sniper:  _playerSprite([[6,3,'#85c1e9'],[7,3,'#85c1e9'],[8,3,'#85c1e9'],[9,3,'#85c1e9'],
-                           [10,3,'#85c1e9'],[11,3,'#85c1e9'],[12,3,'#85c1e9'],[13,3,'#85c1e9']]),
-  cannon:  _playerSprite([[6,2,'#c39bd3'],[7,2,'#c39bd3'],[6,3,'#c39bd3'],[7,3,'#c39bd3'],
-                           [6,4,'#c39bd3'],[7,4,'#c39bd3'],[6,5,'#c39bd3'],[7,5,'#c39bd3']]),
+  pistol:  _playerSprite([
+    [7,4,'#ffe082'],[7,5,'#ffe082'],
+  ]),
+  smg:     _playerSprite([
+    [7,4,'#82e0aa'],[8,4,'#82e0aa'],[9,4,'#82e0aa'],
+    [7,5,'#82e0aa'],[8,5,'#82e0aa'],[9,5,'#82e0aa'],
+  ]),
+  shotgun: _playerSprite([
+    [7,3,'#f0b27a'],[8,3,'#f0b27a'],
+    [7,4,'#f0b27a'],[8,4,'#f0b27a'],
+    [7,5,'#f0b27a'],[8,5,'#f0b27a'],
+    [7,6,'#f0b27a'],[8,6,'#f0b27a'],
+  ]),
+  sniper:  _playerSprite([
+    [7,4,'#85c1e9'],[8,4,'#85c1e9'],[9,4,'#85c1e9'],[10,4,'#85c1e9'],
+    [11,4,'#85c1e9'],[12,4,'#85c1e9'],[13,4,'#85c1e9'],[14,4,'#85c1e9'],
+  ]),
+  cannon:  _playerSprite([
+    [7,3,'#c39bd3'],[8,3,'#c39bd3'],[9,3,'#c39bd3'],
+    [7,4,'#c39bd3'],[8,4,'#c39bd3'],[9,4,'#c39bd3'],
+    [7,5,'#c39bd3'],[8,5,'#c39bd3'],[9,5,'#c39bd3'],
+    [7,6,'#c39bd3'],[8,6,'#c39bd3'],[9,6,'#c39bd3'],
+  ]),
 };
 
 // ── Zombie sprite definitions (12×12 grid, scale 3 = 36×36 px) ───────────────
@@ -548,8 +588,8 @@ class Player {
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.aimAngle);
-    ctx.translate(-16, -16);
-    drawSprite(PLAYER_SPRITES[this.weapon.id] || PLAYER_SPRITES.pistol, 4);
+    ctx.translate(-10, -15);
+    drawSprite(PLAYER_SPRITES[this.weapon.id] || PLAYER_SPRITES.pistol, 3);
     ctx.restore();
 
     // HP bar below player
@@ -2007,6 +2047,13 @@ const UPGRADES = [
     descFn: (v) => `Bullet damage +${v}`,
     maxed: () => false,
     apply(p, v) { p.bulletDamage += v; },
+  },
+  {
+    id: 'pierce_upgrade', name: 'Piercing Shot', icon: '→',
+    tiers: { common: 1, uncommon: 1, rare: 2 },
+    descFn: (v) => `Pierce +${v} — bullets pass through ${v} more enem${v === 1 ? 'y' : 'ies'}`,
+    maxed: (p) => p.pierce >= 5,
+    apply(p, v) { p.pierce = Math.min(p.pierce + v, 5); },
   },
   {
     id: 'move_speed', name: 'Afterburner', icon: '▶▶',

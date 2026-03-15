@@ -156,35 +156,53 @@ const _PLAYER_BODY = [
   [1,10,_PC.bk],[2,10,_PC.bk],[4,10,_PC.bk],[5,10,_PC.bk],
   [1,11,_PC.bk],[2,11,_PC.bk],[4,11,_PC.bk],[5,11,_PC.bk],
 ];
+// Upper body = rows 0-6 (helmet + vest + weapon arm)
+// Lower body = rows 7-11 (belt + legs + boots)
+const _PLAYER_LOWER_PX = _PLAYER_BODY.filter(([, r]) => r >= 7);
+
 function _playerSprite(barrelPixels) {
+  // Full sprite (unused directly now, kept for reference)
   return _PLAYER_BODY.concat(barrelPixels);
 }
-// Weapon barrels extend right from col 7, at arm height (rows 4-5)
-const PLAYER_SPRITES = {
-  pistol:  _playerSprite([
+function _playerUpperSprite(barrelPixels) {
+  // Upper body only (rows 0-6) + weapon barrel pixels (all at rows 3-6)
+  return _PLAYER_BODY.filter(([, r]) => r <= 6).concat(barrelPixels);
+}
+
+// Upper-body+weapon sprites — drawn at aimAngle
+const PLAYER_UPPER_SPRITES = {
+  pistol:  _playerUpperSprite([
     [7,4,'#ffe082'],[7,5,'#ffe082'],
   ]),
-  smg:     _playerSprite([
+  smg:     _playerUpperSprite([
     [7,4,'#82e0aa'],[8,4,'#82e0aa'],[9,4,'#82e0aa'],
     [7,5,'#82e0aa'],[8,5,'#82e0aa'],[9,5,'#82e0aa'],
   ]),
-  shotgun: _playerSprite([
+  shotgun: _playerUpperSprite([
     [7,3,'#f0b27a'],[8,3,'#f0b27a'],
     [7,4,'#f0b27a'],[8,4,'#f0b27a'],
     [7,5,'#f0b27a'],[8,5,'#f0b27a'],
     [7,6,'#f0b27a'],[8,6,'#f0b27a'],
   ]),
-  sniper:  _playerSprite([
+  sniper:  _playerUpperSprite([
     [7,4,'#85c1e9'],[8,4,'#85c1e9'],[9,4,'#85c1e9'],[10,4,'#85c1e9'],
     [11,4,'#85c1e9'],[12,4,'#85c1e9'],[13,4,'#85c1e9'],[14,4,'#85c1e9'],
   ]),
-  cannon:  _playerSprite([
+  cannon:  _playerUpperSprite([
     [7,3,'#c39bd3'],[8,3,'#c39bd3'],[9,3,'#c39bd3'],
     [7,4,'#c39bd3'],[8,4,'#c39bd3'],[9,4,'#c39bd3'],
     [7,5,'#c39bd3'],[8,5,'#c39bd3'],[9,5,'#c39bd3'],
     [7,6,'#c39bd3'],[8,6,'#c39bd3'],[9,6,'#c39bd3'],
   ]),
 };
+
+// Shortest-path angle lerp (handles ±π wrap)
+function _lerpAngle(a, b, t) {
+  let d = b - a;
+  while (d >  Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return a + d * t;
+}
 
 // ── Zombie sprite definitions (12×12 grid, scale 3 = 36×36 px) ───────────────
 // Gruesome grey-flesh palette — no alien green
@@ -377,6 +395,7 @@ class Player {
     this.dodgeFlash        = 0;   // frames to show DODGE! text
     this.activePowerups    = {}; // { type: framesRemaining }
     this.ownedItems        = new Set(); // item ids equipped
+    this.bodyAngle         = 0;  // smoothed angle for legs (follows movement)
   }
 
   hasPowerup(type) { return (this.activePowerups[type] || 0) > 0; }
@@ -427,6 +446,13 @@ class Player {
     const spd = this.moveSpeed * (this.hasPowerup('whirlwind') ? 1.8 : 1);
     this.x += dx * spd;
     this.y += dy * spd;
+
+    // Body angle follows movement direction; drifts toward aim when stationary
+    if (dx !== 0 || dy !== 0) {
+      this.bodyAngle = _lerpAngle(this.bodyAngle, Math.atan2(dy, dx), 0.20);
+    } else {
+      this.bodyAngle = _lerpAngle(this.bodyAngle, this.aimAngle, 0.07);
+    }
 
     // Regeneration
     if (this.regenRate > 0) this.hp = Math.min(this.maxHp, this.hp + this.regenRate);
@@ -584,12 +610,20 @@ class Player {
       ctx.restore();
     }
 
-    // Sprite body pointing in aim direction
+    // Lower body (legs + boots) — follows movement direction
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.bodyAngle);
+    ctx.translate(-10, -15);
+    drawSprite(_PLAYER_LOWER_PX, 3);
+    ctx.restore();
+
+    // Upper body + weapon — follows aim direction
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.aimAngle);
     ctx.translate(-10, -15);
-    drawSprite(PLAYER_SPRITES[this.weapon.id] || PLAYER_SPRITES.pistol, 3);
+    drawSprite(PLAYER_UPPER_SPRITES[this.weapon.id] || PLAYER_UPPER_SPRITES.pistol, 3);
     ctx.restore();
 
     // HP bar below player

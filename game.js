@@ -2082,13 +2082,7 @@ const UPGRADES = [
     maxed: () => false,
     apply(p, v) { p.bulletDamage += v; },
   },
-  {
-    id: 'pierce_upgrade', name: 'Piercing Shot', icon: '→',
-    tiers: { common: 1, uncommon: 1, rare: 2 },
-    descFn: (v) => `Pierce +${v} — bullets pass through ${v} more enem${v === 1 ? 'y' : 'ies'}`,
-    maxed: (p) => p.pierce >= 5,
-    apply(p, v) { p.pierce = Math.min(p.pierce + v, 5); },
-  },
+
   {
     id: 'move_speed', name: 'Afterburner', icon: '▶▶',
     tiers: { common: 0.5, uncommon: 1.0, rare: 1.8 },

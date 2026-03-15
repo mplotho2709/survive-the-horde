@@ -577,7 +577,7 @@ class Enemy {
       heavy:   { hp: 8,  speed: 0.8 },
       charger: { hp: 12, speed: 1.1 },
       shooter: { hp: 4,  speed: 1.1 },
-      elite:   { hp: 60, speed: 1.0 },
+      elite:   { hp: 80, speed: 1.2 },
     };
     // HP grows 12% per wave; speed grows 3.5% per wave (elites scale harder)
     const hpScale    = type === 'elite' ? 1 + (wave - 1) * 0.25 : 1 + (wave - 1) * 0.12;
@@ -600,9 +600,28 @@ class Enemy {
       this.shootTimer = 90 + Math.floor(Math.random() * 60); // frames until first shot
       this.preferredDist = 200; // tries to stay this far from player
     }
+
+    // Elite state
+    if (type === 'elite') {
+      this.enraged    = false;
+      // Lunge (always active)
+      this.lungeState = 'idle';
+      this.lungeTimer = 150 + Math.floor(Math.random() * 90);
+      this.lungeAngle = 0;
+      this.lungeHit   = false;
+      // Slam (unlocks on enrage)
+      this.slamState   = 'idle';
+      this.slamTimer   = 0;
+      this.slamRadius  = 0;
+      this.slamDamaged = false;
+    }
   }
 
   update(player, enemyBullets) {
+    if (this.type === 'elite') {
+      this._updateElite(player);
+      return;
+    }
     if (this.type === 'charger') {
       this._updateCharger(player);
       return;
@@ -615,6 +634,93 @@ class Enemy {
     const spd = Math.min(this.speed, player.moveSpeed * 0.95);
     this.x += Math.cos(angle) * spd;
     this.y += Math.sin(angle) * spd;
+  }
+
+  _updateElite(player) {
+    // ── Enrage at 50% HP ────────────────────────────────────────────────────
+    if (!this.enraged && this.hp <= this.maxHp * 0.5) {
+      this.enraged    = true;
+      this.speed     *= 1.7;
+      this.slamTimer  = 80; // first slam comes soon after enraging
+    }
+
+    // ── Lunge state machine (always active) ─────────────────────────────────
+    this.lungeTimer--;
+    if (this.lungeState === 'idle') {
+      if (this.lungeTimer <= 0) {
+        this.lungeState = 'windup';
+        this.lungeTimer = 55;
+        this.lungeAngle = Math.atan2(player.y - this.y, player.x - this.x);
+      }
+    } else if (this.lungeState === 'windup') {
+      // Track player during first 75% of windup, then lock angle
+      if (this.lungeTimer > 14) {
+        this.lungeAngle = Math.atan2(player.y - this.y, player.x - this.x);
+      }
+      if (this.lungeTimer <= 0) {
+        this.lungeState = 'lunge';
+        this.lungeTimer = 18;
+        this.lungeHit   = false;
+      }
+    } else if (this.lungeState === 'lunge') {
+      this.x += Math.cos(this.lungeAngle) * this.speed * 4.5;
+      this.y += Math.sin(this.lungeAngle) * this.speed * 4.5;
+      if (this.lungeTimer <= 0) {
+        this.lungeState = 'cooldown';
+        this.lungeTimer = 110 + Math.floor(Math.random() * 80);
+      }
+    } else if (this.lungeState === 'cooldown') {
+      if (this.lungeTimer <= 0) {
+        this.lungeState = 'idle';
+        this.lungeTimer = 120 + Math.floor(Math.random() * 90);
+      }
+    }
+
+    // ── Slam state machine (only when enraged) ───────────────────────────────
+    if (this.enraged) {
+      this.slamTimer--;
+      if (this.slamState === 'idle') {
+        if (this.slamTimer <= 0) {
+          if (dist(this, player) < 190) {
+            this.slamState   = 'windup';
+            this.slamTimer   = 60;
+            this.slamRadius  = 0;
+            this.slamDamaged = false;
+          } else {
+            this.slamTimer = 30; // check again soon
+          }
+        }
+      } else if (this.slamState === 'windup') {
+        this.slamTimer--;
+        this.slamRadius = (1 - this.slamTimer / 60) * 95;
+        if (this.slamTimer <= 0) {
+          this.slamState  = 'slam';
+          this.slamTimer  = 14;
+          this.slamRadius = 95;
+        }
+      } else if (this.slamState === 'slam') {
+        this.slamTimer--;
+        if (this.slamTimer <= 0) {
+          this.slamState = 'cooldown';
+          this.slamTimer = 180 + Math.floor(Math.random() * 100);
+        }
+      } else if (this.slamState === 'cooldown') {
+        this.slamTimer--;
+        if (this.slamTimer <= 0) {
+          this.slamState = 'idle';
+          this.slamTimer = 0;
+        }
+      }
+    }
+
+    // ── Movement ────────────────────────────────────────────────────────────
+    // Stop during slam windup/slam; lunge movement is handled above
+    if (this.lungeState !== 'lunge' && this.slamState !== 'windup' && this.slamState !== 'slam') {
+      const angle = Math.atan2(player.y - this.y, player.x - this.x);
+      const spd   = Math.min(this.speed, player.moveSpeed * 0.95);
+      this.x += Math.cos(angle) * spd;
+      this.y += Math.sin(angle) * spd;
+    }
   }
 
   _updateShooter(player, enemyBullets) {
@@ -686,13 +792,71 @@ class Enemy {
 
   draw() {
     if (this.type === 'elite') {
-      // Elite pixel-art body (16×15 at scale 3 = 48×45 px)
+      // ── Enrage aura ────────────────────────────────────────────────────────
+      if (this.enraged) {
+        const ep = Math.sin(Date.now() * 0.009) * 0.5 + 0.5;
+        const eg = ctx.createRadialGradient(this.x, this.y, this.r - 4, this.x, this.y, this.r + 22);
+        eg.addColorStop(0,   'rgba(200,30,30,0)');
+        eg.addColorStop(0.5, `rgba(200,30,30,${0.42 + ep * 0.28})`);
+        eg.addColorStop(1,   'rgba(200,30,30,0)');
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.r + 22, 0, Math.PI * 2);
+        ctx.fillStyle = eg;
+        ctx.fill();
+      }
+
+      // ── Slam windup / slam flash ────────────────────────────────────────────
+      if (this.slamState === 'windup' || this.slamState === 'slam') {
+        const sa = this.slamState === 'slam' ? 0.85 : 0.25 + (this.slamRadius / 95) * 0.5;
+        const sr = Math.max(8, this.slamRadius);
+        const sg = ctx.createRadialGradient(this.x, this.y, Math.max(0, sr - 18), this.x, this.y, sr + 10);
+        sg.addColorStop(0,   'rgba(255,20,20,0)');
+        sg.addColorStop(0.5, `rgba(255,20,20,${sa})`);
+        sg.addColorStop(1,   'rgba(255,20,20,0)');
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, sr + 10, 0, Math.PI * 2);
+        ctx.fillStyle = sg;
+        ctx.fill();
+      }
+
+      // ── Lunge windup indicator ──────────────────────────────────────────────
+      if (this.lungeState === 'windup') {
+        const lp  = 1 - this.lungeTimer / 55;
+        const ax  = this.x + Math.cos(this.lungeAngle) * (this.r + 18 + lp * 12);
+        const ay  = this.y + Math.sin(this.lungeAngle) * (this.r + 18 + lp * 12);
+        const aLen = 9 + lp * 7;
+        ctx.save();
+        ctx.globalAlpha = 0.5 + lp * 0.5;
+        const lg = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.r + 24);
+        lg.addColorStop(0,   `rgba(255,100,0,${0.15 + lp * 0.25})`);
+        lg.addColorStop(1,   'rgba(255,100,0,0)');
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.r + 24, 0, Math.PI * 2);
+        ctx.fillStyle = lg;
+        ctx.fill();
+        ctx.strokeStyle = '#ff6600';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(this.x + Math.cos(this.lungeAngle) * (this.r + 4),
+                   this.y + Math.sin(this.lungeAngle) * (this.r + 4));
+        ctx.lineTo(ax, ay);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(ax - Math.cos(this.lungeAngle - 0.5) * aLen, ay - Math.sin(this.lungeAngle - 0.5) * aLen);
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(ax - Math.cos(this.lungeAngle + 0.5) * aLen, ay - Math.sin(this.lungeAngle + 0.5) * aLen);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // ── Sprite ──────────────────────────────────────────────────────────────
       ctx.save();
       ctx.translate(this.x - 24, this.y - 22);
       drawSprite(ZOMBIE_SPRITES.elite, 3);
       ctx.restore();
 
-      // Always-visible HP bar
+      // ── HP bar ──────────────────────────────────────────────────────────────
       const bw = this.r * 2 + 20;
       const bx = this.x - bw / 2;
       const by = this.y - this.r - 20;
@@ -705,11 +869,11 @@ class Enemy {
       ctx.lineWidth = 1;
       ctx.strokeRect(bx, by, bw, 7);
 
-      // ELITE label
-      ctx.fillStyle = '#f1c40f';
+      // ── Label ───────────────────────────────────────────────────────────────
+      ctx.fillStyle = this.enraged ? '#e74c3c' : '#f1c40f';
       ctx.font = 'bold 9px Courier New';
       ctx.textAlign = 'center';
-      ctx.fillText('ELITE', this.x, by - 3);
+      ctx.fillText(this.enraged ? 'ENRAGED' : 'ELITE', this.x, by - 3);
       return;
     }
 
@@ -2122,10 +2286,23 @@ const Game = {
           // Burst damage on dash impact — much more punishing than normal touch
           this.player.takeDamage(18 + (this.waveManager.wave - 1) * 1.2);
           e.dashHit = true;
+        } else if (e.type === 'elite' && e.lungeState === 'lunge' && !e.lungeHit) {
+          // Elite lunge impact — heavy hit
+          this.player.takeDamage(16 + (this.waveManager.wave - 1) * 1.2);
+          e.lungeHit = true;
         } else {
           this.player.takeDamage(ENEMY_DAMAGE * (1 + (this.waveManager.wave - 1) * 0.06));
         }
         if (this.player.thorns > 0) e.hp -= this.player.thorns;
+      }
+      // Elite slam AoE — damages player within slam radius on slam frame
+      if (e.type === 'elite' && e.slamState === 'slam' && !e.slamDamaged) {
+        if (dist(e, this.player) < e.slamRadius + this.player.r) {
+          this.player.takeDamage(14 + (this.waveManager.wave - 1) * 1.5);
+          e.slamDamaged = true;
+          for (let i = 0; i < 16; i++)
+            this.particles.push(new Particle(e.x, e.y, '#8b0000'));
+        }
       }
     }
 

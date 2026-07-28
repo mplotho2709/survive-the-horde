@@ -56,18 +56,24 @@ object WeeklyTemplate {
         Distance.FULL_IRON to 14.5,
     )
 
+    // Every generated session is at least this long - a sub-30-minute session isn't useful training.
+    private const val MIN_SESSION_DURATION_SEC = 30 * 60
+
     fun sessionsFor(distance: Distance, phase: TrainingPhase, availability: TrainingAvailability? = null): List<WorkoutSpec> {
         val peak = PEAK_LONG_DURATIONS.getValue(distance)
         val scale = PHASE_SCALE.getValue(phase)
+        // Capped generously (not tightly at 1.0x) so a genuinely higher weekly-hours target is
+        // actually reachable at peak week rather than being silently truncated; still bounded to
+        // keep individual session lengths sane for wildly unrealistic inputs.
         val hoursScale = availability?.let {
-            (it.weeklyHoursTarget / PEAK_BASELINE_HOURS.getValue(distance)).coerceIn(0.5, 1.6)
+            (it.weeklyHoursTarget / PEAK_BASELINE_HOURS.getValue(distance)).coerceIn(0.4, 3.0)
         } ?: 1.0
         val longBikeSec = (peak.bikeMin * scale * hoursScale * 60).toInt()
         val longRunSec = (peak.runMin * scale * hoursScale * 60).toInt()
         val longSwimSec = (peak.swimMin * scale * hoursScale * 60).toInt()
-        val otherBikeSec = (longBikeSec * 0.45).toInt().coerceAtLeast(20 * 60)
-        val otherRunSec = (longRunSec * 0.55).toInt().coerceAtLeast(20 * 60)
-        val otherSwimSec = (longSwimSec * 0.70).toInt().coerceAtLeast(20 * 60)
+        val otherBikeSec = (longBikeSec * 0.45).toInt().coerceAtLeast(MIN_SESSION_DURATION_SEC)
+        val otherRunSec = (longRunSec * 0.55).toInt().coerceAtLeast(MIN_SESSION_DURATION_SEC)
+        val otherSwimSec = (longSwimSec * 0.70).toInt().coerceAtLeast(MIN_SESSION_DURATION_SEC)
 
         val sessions = when (phase) {
             TrainingPhase.RACE_WEEK -> raceWeekSessions(otherSwimSec, otherBikeSec, otherRunSec)
@@ -75,7 +81,7 @@ object WeeklyTemplate {
             TrainingPhase.BASE -> baseSessions(otherSwimSec, otherBikeSec, otherRunSec, longBikeSec, longRunSec)
             TrainingPhase.BUILD -> buildSessions(distance, otherSwimSec, otherBikeSec, otherRunSec, longBikeSec, longRunSec)
             TrainingPhase.PEAK -> peakSessions(distance, otherSwimSec, otherBikeSec, otherRunSec, longBikeSec, longRunSec)
-        }
+        }.map { it.copy(durationSec = it.durationSec.coerceAtLeast(MIN_SESSION_DURATION_SEC)) }
         return applyDayCap(sessions, availability?.daysPerWeekTarget)
     }
 

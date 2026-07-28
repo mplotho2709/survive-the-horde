@@ -26,6 +26,7 @@ data class OnboardingUiState(
     val isSaving: Boolean = false,
     val isComplete: Boolean = false,
     val errorMessage: String? = null,
+    val healthConnectPermissionsGranted: Boolean = false,
 ) {
     val canProceedFromDistance: Boolean get() = selectedDistance != null
     val canProceedFromDate: Boolean get() = raceDate != null && raceDate.isAfter(LocalDate.now())

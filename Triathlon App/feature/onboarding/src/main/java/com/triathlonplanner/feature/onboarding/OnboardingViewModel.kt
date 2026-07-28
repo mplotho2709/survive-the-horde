@@ -8,6 +8,7 @@ import com.triathlonplanner.core.model.FtpSource
 import com.triathlonplanner.core.model.RaceGoal
 import com.triathlonplanner.core.model.TrainingAvailability
 import com.triathlonplanner.core.model.UserZoneProfile
+import com.triathlonplanner.data.healthconnect.HealthConnectDataSource
 import com.triathlonplanner.data.repository.PlanRepository
 import com.triathlonplanner.data.repository.ProfileRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -23,10 +24,22 @@ import javax.inject.Inject
 class OnboardingViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val planRepository: PlanRepository,
+    private val healthConnectDataSource: HealthConnectDataSource,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(OnboardingUiState())
     val uiState: StateFlow<OnboardingUiState> = _uiState.asStateFlow()
+
+    fun refreshHealthConnectStatus() {
+        viewModelScope.launch {
+            val granted = healthConnectDataSource.hasAllPermissions()
+            _uiState.update { it.copy(healthConnectPermissionsGranted = granted) }
+        }
+    }
+
+    fun onHealthConnectPermissionsResult(granted: Boolean) {
+        _uiState.update { it.copy(healthConnectPermissionsGranted = granted) }
+    }
 
     fun selectDistance(distance: Distance) {
         val recommended = recommendedFor(distance)

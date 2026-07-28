@@ -26,7 +26,15 @@ interface PlannedWorkoutDao {
     @Query("SELECT * FROM planned_workout WHERE weekId = :weekId ORDER BY dateEpochDay, sortOrderInDay")
     fun observeForWeek(weekId: Long): Flow<List<PlannedWorkoutEntity>>
 
-    @Query("SELECT * FROM planned_workout WHERE dateEpochDay = :dateEpochDay ORDER BY sortOrderInDay")
+    // Scoped to the ACTIVE plan only - without this, a cancelled/abandoned plan's workouts for
+    // today's calendar date would keep showing up alongside the new plan's, since dateEpochDay
+    // ranges from different plans can (and often do) overlap.
+    @Query(
+        "SELECT pw.* FROM planned_workout pw " +
+            "INNER JOIN plan_week wk ON pw.weekId = wk.id " +
+            "INNER JOIN training_plan tp ON wk.planId = tp.id " +
+            "WHERE tp.status = 'ACTIVE' AND pw.dateEpochDay = :dateEpochDay ORDER BY pw.sortOrderInDay",
+    )
     fun observeForDate(dateEpochDay: Long): Flow<List<PlannedWorkoutEntity>>
 
     @Query(

@@ -28,9 +28,6 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -67,7 +64,11 @@ fun OnboardingScreen(
                 OnboardingStep.TRAINING_AVAILABILITY -> TrainingAvailabilityStep(state, viewModel)
                 OnboardingStep.MAX_HR -> MaxHrStep(state, viewModel)
                 OnboardingStep.FTP_CSS -> FtpCssStep(state, viewModel)
-                OnboardingStep.HEALTH_CONNECT -> HealthConnectStep()
+                OnboardingStep.HEALTH_CONNECT -> HealthConnectStep(
+                    granted = state.healthConnectPermissionsGranted,
+                    onRefresh = viewModel::refreshHealthConnectStatus,
+                    onPermissionsResult = viewModel::onHealthConnectPermissionsResult,
+                )
             }
 
             Spacer(Modifier.height(24.dp))
@@ -231,11 +232,12 @@ private fun FtpCssStep(state: OnboardingUiState, viewModel: OnboardingViewModel)
 }
 
 @Composable
-private fun HealthConnectStep() {
-    var permissionsGranted by remember { mutableStateOf(false) }
+private fun HealthConnectStep(granted: Boolean, onRefresh: () -> Unit, onPermissionsResult: (Boolean) -> Unit) {
     val launcher = rememberLauncherForActivityResult(
         contract = healthConnectPermissionRequestContract(),
-    ) { granted -> permissionsGranted = granted.containsAll(HealthConnectPermissions.REQUIRED) }
+    ) { result -> onPermissionsResult(result.containsAll(HealthConnectPermissions.REQUIRED)) }
+
+    LaunchedEffect(Unit) { onRefresh() }
 
     Text("Connect Garmin via Health Connect", style = MaterialTheme.typography.headlineSmall)
     Spacer(Modifier.height(8.dp))
@@ -247,7 +249,11 @@ private fun HealthConnectStep() {
         style = MaterialTheme.typography.bodyMedium,
     )
     Spacer(Modifier.height(16.dp))
-    Button(onClick = { launcher.launch(HealthConnectPermissions.REQUIRED) }) {
-        Text(if (permissionsGranted) "Permissions granted" else "Grant Health Connect access")
+    if (granted) {
+        Text("Already connected - your Garmin workouts will keep syncing automatically.", style = MaterialTheme.typography.bodyMedium)
+    } else {
+        Button(onClick = { launcher.launch(HealthConnectPermissions.REQUIRED) }) {
+            Text("Grant Health Connect access")
+        }
     }
 }

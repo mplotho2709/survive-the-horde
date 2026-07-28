@@ -19,4 +19,6 @@ class RaceGoalRepository @Inject constructor(
         raceGoalDao.deactivateAll()
         return raceGoalDao.insert(goal.toEntity(isActive = true, createdAt = Instant.now()))
     }
+
+    suspend fun deactivateActiveGoal() = raceGoalDao.deactivateAll()
 }

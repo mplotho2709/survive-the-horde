@@ -31,4 +31,5 @@ data class PlannedWorkoutEntity(
     val zoneLevel: Int?,
     val brickGroupId: String?,
     val sortOrderInDay: Int,
+    val substitutedDiscipline: String? = null,
 )

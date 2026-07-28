@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -21,8 +22,12 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -36,6 +41,7 @@ import com.triathlonplanner.domain.zones.ZoneRange
 @Composable
 fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    var showCancelPlanDialog by remember { mutableStateOf(false) }
     val launcher = rememberLauncherForActivityResult(
         contract = healthConnectPermissionRequestContract(),
     ) { granted -> viewModel.onHealthConnectPermissionsResult(granted.containsAll(HealthConnectPermissions.REQUIRED)) }
@@ -126,7 +132,30 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
             ZoneTable("Heart Rate Zones", state.hrZones, "bpm")
             ZoneTable("Power Zones", state.powerZones, "W")
             ZoneTable("Swim Pace Zones", state.swimZones, "sec/100m")
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 20.dp))
+
+            Text("Training Plan", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = { showCancelPlanDialog = true }) { Text("Cancel current plan") }
         }
+    }
+
+    if (showCancelPlanDialog) {
+        AlertDialog(
+            onDismissRequest = { showCancelPlanDialog = false },
+            title = { Text("Cancel your training plan?") },
+            text = { Text("Your progress and workout history are kept, but you'll need to set up a new goal to get a new plan.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showCancelPlanDialog = false
+                    viewModel.abandonPlan()
+                }) { Text("Cancel plan") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCancelPlanDialog = false }) { Text("Keep plan") }
+            },
+        )
     }
 }
 

@@ -23,13 +23,14 @@ object HrZoneCalculator {
     )
 
     // (lowerPercent, upperPercent) of max HR, one pair per zone 1..5 - used only when resting HR
-    // is unknown and Karvonen can't be computed.
+    // is unknown and Karvonen can't be computed. Capped at 100% of maxHr (a zone can never
+    // exceed the person's own max by definition) - same round breakpoints as HRR_BOUNDS above.
     private val PERCENT_MAX_BOUNDS = listOf(
-        0.0 to 0.68,
-        0.69 to 0.83,
-        0.84 to 0.94,
-        0.95 to 1.05,
-        1.06 to 1.20,
+        0.0 to 0.60,
+        0.60 to 0.70,
+        0.70 to 0.80,
+        0.80 to 0.90,
+        0.90 to 1.00,
     )
 
     fun calculateZones(maxHr: Int, restingHr: Int?): List<ZoneRange> {

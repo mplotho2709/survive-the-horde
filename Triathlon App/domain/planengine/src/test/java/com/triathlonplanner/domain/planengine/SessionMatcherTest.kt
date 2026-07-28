@@ -98,4 +98,29 @@ class SessionMatcherTest {
 
         assertThat(result.single().matchStatus).isEqualTo(MatchStatus.UNMATCHED_EXTRA)
     }
+
+    @Test
+    fun `a run instead of the planned bike is recognized as a substitution, not left unmatched`() {
+        val plan = listOf(planned(1, Discipline.BIKE))
+        val activities = listOf(activity(Discipline.RUN, 1000))
+
+        val result = SessionMatcher.matchDay(activities, plan)
+
+        assertThat(result.single().matchStatus).isEqualTo(MatchStatus.SUBSTITUTED)
+        assertThat(result.single().matchedPlannedWorkoutId).isEqualTo(1L)
+    }
+
+    @Test
+    fun `an extra activity with no other-discipline planned session left falls back to unmatched extra`() {
+        val plan = listOf(planned(1, Discipline.RUN))
+        val activities = listOf(activity(Discipline.RUN, 1000), activity(Discipline.SWIM, 5000))
+
+        val result = SessionMatcher.matchDay(activities, plan)
+
+        val runActivity = result.first { it.discipline == Discipline.RUN }
+        val swimActivity = result.first { it.discipline == Discipline.SWIM }
+        assertThat(runActivity.matchStatus).isEqualTo(MatchStatus.MATCHED)
+        assertThat(swimActivity.matchStatus).isEqualTo(MatchStatus.UNMATCHED_EXTRA)
+        assertThat(swimActivity.matchedPlannedWorkoutId).isNull()
+    }
 }

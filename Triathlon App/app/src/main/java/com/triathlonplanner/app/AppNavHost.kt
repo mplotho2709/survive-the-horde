@@ -23,12 +23,15 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.triathlonplanner.feature.onboarding.OnboardingScreen
 import com.triathlonplanner.feature.plan.PlanScreen
+import com.triathlonplanner.feature.plan.PlanWeekDetailScreen
 import com.triathlonplanner.feature.profile.ProfileScreen
 import com.triathlonplanner.feature.progress.ProgressScreen
 import com.triathlonplanner.feature.today.TodayScreen
@@ -66,9 +69,17 @@ private fun MainScaffold() {
             modifier = Modifier.padding(padding),
         ) {
             composable(Route.Today.route) { TodayScreen() }
-            composable(Route.Plan.route) { PlanScreen() }
+            composable(Route.Plan.route) {
+                PlanScreen(onWeekClick = { weekIndex -> navController.navigate(Route.PlanWeekDetail.buildRoute(weekIndex)) })
+            }
             composable(Route.Progress.route) { ProgressScreen() }
             composable(Route.Profile.route) { ProfileScreen() }
+            composable(
+                Route.PlanWeekDetail.route,
+                arguments = listOf(navArgument("weekIndex") { type = NavType.IntType }),
+            ) {
+                PlanWeekDetailScreen(onBack = { navController.popBackStack() })
+            }
         }
     }
 }

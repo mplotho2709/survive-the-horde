@@ -12,6 +12,7 @@ data class TodayWorkoutView(
     val status: WorkoutStatus,
     val durationMin: Int,
     val zoneLabel: String?,
+    val substitutedWithDiscipline: Discipline? = null,
 )
 
 data class TodayUiState(

@@ -9,6 +9,7 @@ import com.triathlonplanner.core.model.UserZoneProfile
 import com.triathlonplanner.data.healthconnect.HealthConnectAvailability
 import com.triathlonplanner.data.healthconnect.HealthConnectDataSource
 import com.triathlonplanner.data.healthconnect.checkHealthConnectAvailability
+import com.triathlonplanner.data.repository.PlanRepository
 import com.triathlonplanner.data.repository.ProfileRepository
 import com.triathlonplanner.domain.zones.HrZoneCalculator
 import com.triathlonplanner.domain.zones.PowerZoneCalculator
@@ -25,6 +26,7 @@ import javax.inject.Inject
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
+    private val planRepository: PlanRepository,
     private val healthConnectDataSource: HealthConnectDataSource,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
@@ -113,6 +115,8 @@ class ProfileViewModel @Inject constructor(
             _uiState.update { it.copy(isSaved = true) }
         }
     }
+
+    fun abandonPlan() = viewModelScope.launch { planRepository.abandonActivePlan() }
 
     private fun updateAndRecompute(block: (ProfileUiState) -> ProfileUiState) {
         _uiState.update(block)

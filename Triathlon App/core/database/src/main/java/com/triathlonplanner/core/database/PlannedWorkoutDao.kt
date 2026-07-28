@@ -39,6 +39,9 @@ interface PlannedWorkoutDao {
     @Query("UPDATE planned_workout SET status = :status WHERE id = :id")
     suspend fun updateStatus(id: Long, status: String)
 
+    @Query("UPDATE planned_workout SET status = :status, substitutedDiscipline = :substitutedDiscipline WHERE id = :id")
+    suspend fun updateStatusWithSubstitution(id: Long, status: String, substitutedDiscipline: String)
+
     @Query("UPDATE planned_workout SET workoutType = :workoutType, zoneLevel = :zoneLevel WHERE id = :id")
     suspend fun updateWorkoutTypeAndZone(id: Long, workoutType: String, zoneLevel: Int?)
 

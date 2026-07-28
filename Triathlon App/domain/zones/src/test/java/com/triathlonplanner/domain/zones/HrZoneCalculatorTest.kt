@@ -24,10 +24,20 @@ class HrZoneCalculatorTest {
         val zones = HrZoneCalculator.calculateZones(maxHr = 200, restingHr = null)
 
         assertThat(zones).hasSize(5)
-        // Zone 1 upper bound = 68% of 200 = 136
-        assertThat(zones[0].upperBound).isEqualTo(136)
-        // Zone 5 lower bound = 106% of 200 = 212
-        assertThat(zones[4].lowerBound).isEqualTo(212)
+        // Zone 1 upper bound = 60% of 200 = 120
+        assertThat(zones[0].upperBound).isEqualTo(120)
+        // Zone 5 lower bound = 90% of 200 = 180
+        assertThat(zones[4].lowerBound).isEqualTo(180)
+    }
+
+    @Test
+    fun `no fallback zone ever exceeds the person's own max hr`() {
+        val maxHr = 185
+        val zones = HrZoneCalculator.calculateZones(maxHr = maxHr, restingHr = null)
+
+        zones.forEach { zone ->
+            assertThat(zone.upperBound).isAtMost(maxHr)
+        }
     }
 
     @Test
@@ -57,6 +67,6 @@ class HrZoneCalculatorTest {
         val zones = HrZoneCalculator.calculateZones(maxHr = 190, restingHr = 190)
 
         // Falls back to %MaxHR zones rather than dividing by zero HRR.
-        assertThat(zones[0].upperBound).isEqualTo((190 * 0.68).toInt())
+        assertThat(zones[0].upperBound).isEqualTo((190 * 0.60).toInt())
     }
 }

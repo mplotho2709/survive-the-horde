@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Circle
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -80,6 +81,7 @@ private fun StatusIcon(status: WorkoutStatus) {
     when (status) {
         WorkoutStatus.COMPLETED -> Icon(Icons.Filled.CheckCircle, contentDescription = "Completed", tint = Color(0xFF2E7D32))
         WorkoutStatus.MISSED -> Icon(Icons.Filled.Warning, contentDescription = "Missed", tint = MaterialTheme.colorScheme.error)
+        WorkoutStatus.SUBSTITUTED -> Icon(Icons.Filled.SwapHoriz, contentDescription = "Substituted", tint = MaterialTheme.colorScheme.tertiary)
         else -> Icon(Icons.Filled.Circle, contentDescription = "Planned", tint = MaterialTheme.colorScheme.outline)
     }
 }

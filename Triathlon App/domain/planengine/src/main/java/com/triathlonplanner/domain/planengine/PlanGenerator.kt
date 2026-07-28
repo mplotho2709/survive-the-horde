@@ -63,7 +63,7 @@ object PlanGenerator {
         firstMonday: LocalDate,
     ): GeneratedWeek {
         val weekMonday = firstMonday.plusWeeks((weekPlan.weekIndex - 1).toLong())
-        val specs = WeeklyTemplate.sessionsFor(raceGoal.distance, weekPlan.phase)
+        val specs = WeeklyTemplate.sessionsFor(raceGoal.distance, weekPlan.phase, raceGoal.trainingAvailability)
 
         val rawLoads = specs.map { it.durationSec * (it.zone?.level ?: 1).toDouble() }
         val totalRawLoad = rawLoads.sum().takeIf { it > 0.0 } ?: 1.0

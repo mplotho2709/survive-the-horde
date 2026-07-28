@@ -38,6 +38,7 @@ enum class WorkoutStatus {
     MISSED,
     MODIFIED,
     SKIPPED_BY_ADAPTATION,
+    SUBSTITUTED,
 }
 
 enum class WorkoutStepType {
@@ -58,6 +59,7 @@ enum class MatchStatus {
     MATCHED,
     UNMATCHED_EXTRA,
     MISSED_NO_ACTIVITY,
+    SUBSTITUTED,
 }
 
 enum class FtpSource {
@@ -77,6 +79,7 @@ enum class AdaptationTriggerType {
     EXTENDED_ABSENCE,
     OVERREACH,
     UNDERREACH,
+    SESSION_SUBSTITUTED,
 }
 
 enum class AdaptationAction {
@@ -88,6 +91,7 @@ enum class AdaptationAction {
     DOWNGRADE_TO_REST,
     SOFTEN_CUTBACK,
     EXTEND_BUILD_BLOCK,
+    RECORD_SUBSTITUTION,
 }
 
 /**

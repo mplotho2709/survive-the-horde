@@ -12,4 +12,6 @@ data class RaceGoalEntity(
     val targetFinishTimeSec: Int?,
     val isActive: Boolean,
     val createdAtEpochMilli: Long,
+    val targetWeeklyHours: Double? = null,
+    val targetDaysPerWeek: Int? = null,
 )

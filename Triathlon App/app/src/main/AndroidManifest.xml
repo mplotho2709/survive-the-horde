@@ -22,6 +22,28 @@
             </intent-filter>
         </activity>
 
+        <!-- Health Connect's permission screen links here ("privacy policy" link) - required
+             manifest declaration for the Health Connect permission flow. Both forms included:
+             pre-Android-14 (APK-based Health Connect) and Android 14+ (framework module). -->
+        <activity
+            android:name=".PermissionsRationaleActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+        </activity>
+
+        <activity-alias
+            android:name="ViewPermissionUsageActivity"
+            android:exported="true"
+            android:targetActivity=".PermissionsRationaleActivity"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
+
         <!-- We provide our own HiltWorkerFactory via Configuration.Provider (TriathlonApp),
              so WorkManager's default on-startup initializer must be disabled. -->
         <provider

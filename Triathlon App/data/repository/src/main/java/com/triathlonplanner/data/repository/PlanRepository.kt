@@ -152,4 +152,11 @@ class PlanRepository @Inject constructor(
         val plan = trainingPlanDao.getActiveOnce() ?: return
         planWeekDao.updatePlannedLoad(plan.id, weekIndex, newLoad)
     }
+
+    /** Keeps history (rows aren't deleted) - just flips the plan/goal inactive so onboarding can start fresh. */
+    suspend fun abandonActivePlan() {
+        val plan = trainingPlanDao.getActiveOnce() ?: return
+        trainingPlanDao.updateStatus(plan.id, "ABANDONED")
+        raceGoalRepository.deactivateActiveGoal()
+    }
 }

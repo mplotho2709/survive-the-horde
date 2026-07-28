@@ -48,7 +48,23 @@ object SessionMatcher {
             }
         }
 
-        return result
+        // Second pass: an activity that didn't match anything of its own discipline may still be a
+        // deliberate substitution for a different discipline's still-unmatched planned session that
+        // day (e.g. ran instead of the scheduled bike) - recognize that explicitly rather than
+        // letting the planned session silently age into "missed".
+        val extrasInOrder = result.filter { it.matchStatus == MatchStatus.UNMATCHED_EXTRA }.sortedBy { it.startTime }
+        val remainingPlanned = stillPlanned.filter { it.id !in consumedPlannedIds }.sortedBy { it.sortOrderInDay }.toMutableList()
+        val substitutions = mutableMapOf<String, PlannedWorkoutSnapshot>()
+        extrasInOrder.forEach { activity ->
+            val idx = remainingPlanned.indexOfFirst { it.discipline != activity.discipline }
+            if (idx != -1) substitutions[activity.healthConnectRecordId] = remainingPlanned.removeAt(idx)
+        }
+
+        return result.map { activity ->
+            substitutions[activity.healthConnectRecordId]?.let {
+                activity.copy(matchedPlannedWorkoutId = it.id, matchStatus = MatchStatus.SUBSTITUTED)
+            } ?: activity
+        }
     }
 
     private fun disciplineMatches(activityDiscipline: Discipline, plannedDiscipline: Discipline): Boolean =

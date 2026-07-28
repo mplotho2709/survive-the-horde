@@ -3,6 +3,7 @@ package com.triathlonplanner.domain.planengine
 import com.triathlonplanner.core.model.Discipline
 import com.triathlonplanner.core.model.Distance
 import com.triathlonplanner.core.model.IntensityZone
+import com.triathlonplanner.core.model.TrainingAvailability
 import com.triathlonplanner.core.model.TrainingPhase
 import com.triathlonplanner.core.model.WorkoutType
 
@@ -45,23 +46,50 @@ object WeeklyTemplate {
         TrainingPhase.RACE_WEEK to 0.20,
     )
 
-    fun sessionsFor(distance: Distance, phase: TrainingPhase): List<WorkoutSpec> {
+    // Peak-week volume (hours) implied by PEAK_LONG_DURATIONS + the other-session fractions below at
+    // hoursScale=1.0, hand-traced from sessionsFor's own output - used only to turn a user's target
+    // weekly hours into a scale factor relative to what the template already produces.
+    private val PEAK_BASELINE_HOURS = mapOf(
+        Distance.SPRINT to 4.3,
+        Distance.OLYMPIC to 5.2,
+        Distance.HALF_IRON to 10.4,
+        Distance.FULL_IRON to 14.5,
+    )
+
+    fun sessionsFor(distance: Distance, phase: TrainingPhase, availability: TrainingAvailability? = null): List<WorkoutSpec> {
         val peak = PEAK_LONG_DURATIONS.getValue(distance)
         val scale = PHASE_SCALE.getValue(phase)
-        val longBikeSec = (peak.bikeMin * scale * 60).toInt()
-        val longRunSec = (peak.runMin * scale * 60).toInt()
-        val longSwimSec = (peak.swimMin * scale * 60).toInt()
+        val hoursScale = availability?.let {
+            (it.weeklyHoursTarget / PEAK_BASELINE_HOURS.getValue(distance)).coerceIn(0.5, 1.6)
+        } ?: 1.0
+        val longBikeSec = (peak.bikeMin * scale * hoursScale * 60).toInt()
+        val longRunSec = (peak.runMin * scale * hoursScale * 60).toInt()
+        val longSwimSec = (peak.swimMin * scale * hoursScale * 60).toInt()
         val otherBikeSec = (longBikeSec * 0.45).toInt().coerceAtLeast(20 * 60)
         val otherRunSec = (longRunSec * 0.55).toInt().coerceAtLeast(20 * 60)
         val otherSwimSec = (longSwimSec * 0.70).toInt().coerceAtLeast(20 * 60)
 
-        return when (phase) {
+        val sessions = when (phase) {
             TrainingPhase.RACE_WEEK -> raceWeekSessions(otherSwimSec, otherBikeSec, otherRunSec)
             TrainingPhase.TAPER -> taperSessions(otherSwimSec, otherBikeSec, otherRunSec, longRunSec)
             TrainingPhase.BASE -> baseSessions(otherSwimSec, otherBikeSec, otherRunSec, longBikeSec, longRunSec)
             TrainingPhase.BUILD -> buildSessions(distance, otherSwimSec, otherBikeSec, otherRunSec, longBikeSec, longRunSec)
             TrainingPhase.PEAK -> peakSessions(distance, otherSwimSec, otherBikeSec, otherRunSec, longBikeSec, longRunSec)
         }
+        return applyDayCap(sessions, availability?.daysPerWeekTarget)
+    }
+
+    /** Drops whole days (not individual sessions) when the template uses more distinct days than the
+     * user asked for - starting from the least-important day, where a day's importance is its *most*
+     * protected session, so a day containing the long ride/brick is never cut. */
+    private fun applyDayCap(sessions: List<WorkoutSpec>, daysPerWeekTarget: Int?): List<WorkoutSpec> {
+        if (daysPerWeekTarget == null) return sessions
+        val dayGroups = sessions.groupBy { it.dayOfWeek }
+        val daysToDrop = dayGroups.size - daysPerWeekTarget
+        if (daysToDrop <= 0) return sessions
+        val dayImportance = dayGroups.mapValues { (_, specs) -> specs.maxOf { DropPriority.rank(it.discipline, it.workoutType) } }
+        val dropDays = dayGroups.keys.sortedBy { dayImportance.getValue(it) }.take(daysToDrop).toSet()
+        return sessions.filterNot { it.dayOfWeek in dropDays }
     }
 
     private fun baseSessions(

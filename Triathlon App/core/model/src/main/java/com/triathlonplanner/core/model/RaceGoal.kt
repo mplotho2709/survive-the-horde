@@ -7,4 +7,5 @@ data class RaceGoal(
     val raceDate: LocalDate,
     val raceName: String? = null,
     val targetFinishTimeSec: Int? = null,
+    val trainingAvailability: TrainingAvailability? = null,
 )

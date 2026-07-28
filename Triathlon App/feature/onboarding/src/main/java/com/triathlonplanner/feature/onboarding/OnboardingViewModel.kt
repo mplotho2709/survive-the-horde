@@ -6,6 +6,7 @@ import com.triathlonplanner.core.model.CssSource
 import com.triathlonplanner.core.model.Distance
 import com.triathlonplanner.core.model.FtpSource
 import com.triathlonplanner.core.model.RaceGoal
+import com.triathlonplanner.core.model.TrainingAvailability
 import com.triathlonplanner.core.model.UserZoneProfile
 import com.triathlonplanner.data.repository.PlanRepository
 import com.triathlonplanner.data.repository.ProfileRepository
@@ -28,12 +29,22 @@ class OnboardingViewModel @Inject constructor(
     val uiState: StateFlow<OnboardingUiState> = _uiState.asStateFlow()
 
     fun selectDistance(distance: Distance) {
-        _uiState.update { it.copy(selectedDistance = distance) }
+        val recommended = recommendedFor(distance)
+        _uiState.update {
+            it.copy(
+                selectedDistance = distance,
+                weeklyHoursInput = recommended.weeklyHoursTarget.toString(),
+                daysPerWeekInput = recommended.daysPerWeekTarget.toString(),
+            )
+        }
     }
 
     fun selectRaceDate(date: LocalDate) {
         _uiState.update { it.copy(raceDate = date) }
     }
+
+    fun updateWeeklyHours(value: String) = _uiState.update { it.copy(weeklyHoursInput = value.filter { c -> c.isDigit() || c == '.' }) }
+    fun updateDaysPerWeek(value: String) = _uiState.update { it.copy(daysPerWeekInput = value.filter(Char::isDigit)) }
 
     fun updateMaxHr(value: String) = _uiState.update { it.copy(maxHrInput = value.filter(Char::isDigit)) }
     fun updateRestingHr(value: String) = _uiState.update { it.copy(restingHrInput = value.filter(Char::isDigit)) }
@@ -47,7 +58,8 @@ class OnboardingViewModel @Inject constructor(
         val current = _uiState.value.step
         val next = when (current) {
             OnboardingStep.DISTANCE -> OnboardingStep.RACE_DATE
-            OnboardingStep.RACE_DATE -> OnboardingStep.MAX_HR
+            OnboardingStep.RACE_DATE -> OnboardingStep.TRAINING_AVAILABILITY
+            OnboardingStep.TRAINING_AVAILABILITY -> OnboardingStep.MAX_HR
             OnboardingStep.MAX_HR -> OnboardingStep.FTP_CSS
             OnboardingStep.FTP_CSS -> OnboardingStep.HEALTH_CONNECT
             OnboardingStep.HEALTH_CONNECT -> {
@@ -63,7 +75,8 @@ class OnboardingViewModel @Inject constructor(
         val previous = when (current) {
             OnboardingStep.DISTANCE -> return
             OnboardingStep.RACE_DATE -> OnboardingStep.DISTANCE
-            OnboardingStep.MAX_HR -> OnboardingStep.RACE_DATE
+            OnboardingStep.TRAINING_AVAILABILITY -> OnboardingStep.RACE_DATE
+            OnboardingStep.MAX_HR -> OnboardingStep.TRAINING_AVAILABILITY
             OnboardingStep.FTP_CSS -> OnboardingStep.MAX_HR
             OnboardingStep.HEALTH_CONNECT -> OnboardingStep.FTP_CSS
         }
@@ -92,8 +105,16 @@ class OnboardingViewModel @Inject constructor(
                     cssPaceSecPer100m = cssPaceSecPer100m,
                     cssSource = if (cssPaceSecPer100m != null) CssSource.MANUAL else null,
                 )
+                val availability = TrainingAvailability(
+                    weeklyHoursTarget = state.weeklyHoursInput.toDoubleOrNull() ?: recommendedFor(distance).weeklyHoursTarget,
+                    daysPerWeekTarget = state.daysPerWeekInput.toIntOrNull() ?: recommendedFor(distance).daysPerWeekTarget,
+                )
                 profileRepository.saveProfile(profile)
-                planRepository.createPlanForGoal(RaceGoal(distance, raceDate), profile, LocalDate.now())
+                planRepository.createPlanForGoal(
+                    RaceGoal(distance, raceDate, trainingAvailability = availability),
+                    profile,
+                    LocalDate.now(),
+                )
                 _uiState.update { it.copy(isSaving = false, isComplete = true) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isSaving = false, errorMessage = "Couldn't create your plan: ${e.message}") }

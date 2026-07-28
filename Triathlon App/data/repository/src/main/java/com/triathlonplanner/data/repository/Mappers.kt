@@ -25,6 +25,7 @@ import com.triathlonplanner.core.model.PlanWeekSummary
 import com.triathlonplanner.core.model.PlannedWorkoutSnapshot
 import com.triathlonplanner.core.model.RaceGoal
 import com.triathlonplanner.core.model.RollingLoadState
+import com.triathlonplanner.core.model.TrainingAvailability
 import com.triathlonplanner.core.model.TrainingPhase
 import com.triathlonplanner.core.model.UserZoneProfile
 import com.triathlonplanner.core.model.WorkoutStatus
@@ -58,6 +59,11 @@ fun RaceGoalEntity.toDomain(): RaceGoal = RaceGoal(
     raceDate = LocalDate.ofEpochDay(raceDateEpochDay),
     raceName = raceName,
     targetFinishTimeSec = targetFinishTimeSec,
+    trainingAvailability = run {
+        val hours = targetWeeklyHours
+        val days = targetDaysPerWeek
+        if (hours != null && days != null) TrainingAvailability(weeklyHoursTarget = hours, daysPerWeekTarget = days) else null
+    },
 )
 
 fun RaceGoal.toEntity(isActive: Boolean, createdAt: Instant): RaceGoalEntity = RaceGoalEntity(
@@ -67,6 +73,8 @@ fun RaceGoal.toEntity(isActive: Boolean, createdAt: Instant): RaceGoalEntity = R
     targetFinishTimeSec = targetFinishTimeSec,
     isActive = isActive,
     createdAtEpochMilli = createdAt.toEpochMilli(),
+    targetWeeklyHours = trainingAvailability?.weeklyHoursTarget,
+    targetDaysPerWeek = trainingAvailability?.daysPerWeekTarget,
 )
 
 fun PlannedWorkoutWithWeekIndex.toDomainSnapshot(): PlannedWorkoutSnapshot = PlannedWorkoutSnapshot(
@@ -81,6 +89,7 @@ fun PlannedWorkoutWithWeekIndex.toDomainSnapshot(): PlannedWorkoutSnapshot = Pla
     zone = workout.zoneLevel?.let { IntensityZone(it) },
     brickGroupId = workout.brickGroupId,
     sortOrderInDay = workout.sortOrderInDay,
+    substitutedWithDiscipline = workout.substitutedDiscipline?.let { Discipline.valueOf(it) },
 )
 
 fun CompletedActivityEntity.toDomain(): CompletedActivity = CompletedActivity(
@@ -172,4 +181,5 @@ fun PlannedWorkoutEntity.toSnapshot(weekIndex: Int): PlannedWorkoutSnapshot = Pl
     zone = zoneLevel?.let { IntensityZone(it) },
     brickGroupId = brickGroupId,
     sortOrderInDay = sortOrderInDay,
+    substitutedWithDiscipline = substitutedDiscipline?.let { Discipline.valueOf(it) },
 )

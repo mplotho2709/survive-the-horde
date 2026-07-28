@@ -1,0 +1,721 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "eab5adf87acfc0f2faf37df5778024fe",
+    "entities": [
+      {
+        "tableName": "user_profile",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `maxHr` INTEGER NOT NULL, `restingHr` INTEGER, `ftpWatts` INTEGER, `ftpSource` TEXT, `cssPaceSecPer100m` INTEGER, `cssSource` TEXT, `weightKg` REAL, `updatedAtEpochMilli` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxHr",
+            "columnName": "maxHr",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "restingHr",
+            "columnName": "restingHr",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "ftpWatts",
+            "columnName": "ftpWatts",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "ftpSource",
+            "columnName": "ftpSource",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "cssPaceSecPer100m",
+            "columnName": "cssPaceSecPer100m",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "cssSource",
+            "columnName": "cssSource",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "weightKg",
+            "columnName": "weightKg",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "updatedAtEpochMilli",
+            "columnName": "updatedAtEpochMilli",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "race_goal",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `distance` TEXT NOT NULL, `raceDateEpochDay` INTEGER NOT NULL, `raceName` TEXT, `targetFinishTimeSec` INTEGER, `isActive` INTEGER NOT NULL, `createdAtEpochMilli` INTEGER NOT NULL, `targetWeeklyHours` REAL, `targetDaysPerWeek` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "distance",
+            "columnName": "distance",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "raceDateEpochDay",
+            "columnName": "raceDateEpochDay",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "raceName",
+            "columnName": "raceName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "targetFinishTimeSec",
+            "columnName": "targetFinishTimeSec",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isActive",
+            "columnName": "isActive",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMilli",
+            "columnName": "createdAtEpochMilli",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "targetWeeklyHours",
+            "columnName": "targetWeeklyHours",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "targetDaysPerWeek",
+            "columnName": "targetDaysPerWeek",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "training_plan",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `raceGoalId` INTEGER NOT NULL, `startDateEpochDay` INTEGER NOT NULL, `totalWeeks` INTEGER NOT NULL, `status` TEXT NOT NULL, `generatedAtEpochMilli` INTEGER NOT NULL, FOREIGN KEY(`raceGoalId`) REFERENCES `race_goal`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "raceGoalId",
+            "columnName": "raceGoalId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startDateEpochDay",
+            "columnName": "startDateEpochDay",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalWeeks",
+            "columnName": "totalWeeks",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "generatedAtEpochMilli",
+            "columnName": "generatedAtEpochMilli",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_training_plan_raceGoalId",
+            "unique": false,
+            "columnNames": [
+              "raceGoalId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_training_plan_raceGoalId` ON `${TABLE_NAME}` (`raceGoalId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "race_goal",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "raceGoalId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "plan_week",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `planId` INTEGER NOT NULL, `weekIndex` INTEGER NOT NULL, `startDateEpochDay` INTEGER NOT NULL, `phase` TEXT NOT NULL, `isRecoveryWeek` INTEGER NOT NULL, `plannedWeeklyLoad` INTEGER NOT NULL, FOREIGN KEY(`planId`) REFERENCES `training_plan`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "planId",
+            "columnName": "planId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "weekIndex",
+            "columnName": "weekIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startDateEpochDay",
+            "columnName": "startDateEpochDay",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "phase",
+            "columnName": "phase",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isRecoveryWeek",
+            "columnName": "isRecoveryWeek",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "plannedWeeklyLoad",
+            "columnName": "plannedWeeklyLoad",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_plan_week_planId",
+            "unique": false,
+            "columnNames": [
+              "planId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_plan_week_planId` ON `${TABLE_NAME}` (`planId`)"
+          },
+          {
+            "name": "index_plan_week_planId_weekIndex",
+            "unique": true,
+            "columnNames": [
+              "planId",
+              "weekIndex"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_plan_week_planId_weekIndex` ON `${TABLE_NAME}` (`planId`, `weekIndex`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "training_plan",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "planId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "planned_workout",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `weekId` INTEGER NOT NULL, `dateEpochDay` INTEGER NOT NULL, `discipline` TEXT NOT NULL, `workoutType` TEXT NOT NULL, `title` TEXT NOT NULL, `plannedDurationSec` INTEGER NOT NULL, `plannedDistanceM` INTEGER, `plannedLoad` INTEGER NOT NULL, `status` TEXT NOT NULL, `zoneLevel` INTEGER, `brickGroupId` TEXT, `sortOrderInDay` INTEGER NOT NULL, `substitutedDiscipline` TEXT, FOREIGN KEY(`weekId`) REFERENCES `plan_week`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "weekId",
+            "columnName": "weekId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dateEpochDay",
+            "columnName": "dateEpochDay",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "discipline",
+            "columnName": "discipline",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "workoutType",
+            "columnName": "workoutType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "plannedDurationSec",
+            "columnName": "plannedDurationSec",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "plannedDistanceM",
+            "columnName": "plannedDistanceM",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "plannedLoad",
+            "columnName": "plannedLoad",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "zoneLevel",
+            "columnName": "zoneLevel",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "brickGroupId",
+            "columnName": "brickGroupId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sortOrderInDay",
+            "columnName": "sortOrderInDay",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "substitutedDiscipline",
+            "columnName": "substitutedDiscipline",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_planned_workout_weekId",
+            "unique": false,
+            "columnNames": [
+              "weekId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_planned_workout_weekId` ON `${TABLE_NAME}` (`weekId`)"
+          },
+          {
+            "name": "index_planned_workout_dateEpochDay",
+            "unique": false,
+            "columnNames": [
+              "dateEpochDay"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_planned_workout_dateEpochDay` ON `${TABLE_NAME}` (`dateEpochDay`)"
+          },
+          {
+            "name": "index_planned_workout_status",
+            "unique": false,
+            "columnNames": [
+              "status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_planned_workout_status` ON `${TABLE_NAME}` (`status`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "plan_week",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "weekId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "workout_step",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `plannedWorkoutId` INTEGER NOT NULL, `stepOrder` INTEGER NOT NULL, `stepType` TEXT NOT NULL, `durationSec` INTEGER, `distanceM` INTEGER, `intensityZoneLevel` INTEGER, `repeatCount` INTEGER, FOREIGN KEY(`plannedWorkoutId`) REFERENCES `planned_workout`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "plannedWorkoutId",
+            "columnName": "plannedWorkoutId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stepOrder",
+            "columnName": "stepOrder",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stepType",
+            "columnName": "stepType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "durationSec",
+            "columnName": "durationSec",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "distanceM",
+            "columnName": "distanceM",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "intensityZoneLevel",
+            "columnName": "intensityZoneLevel",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "repeatCount",
+            "columnName": "repeatCount",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_workout_step_plannedWorkoutId",
+            "unique": false,
+            "columnNames": [
+              "plannedWorkoutId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_workout_step_plannedWorkoutId` ON `${TABLE_NAME}` (`plannedWorkoutId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "planned_workout",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "plannedWorkoutId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "completed_activity",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `healthConnectRecordId` TEXT NOT NULL, `discipline` TEXT NOT NULL, `startTimeEpochMilli` INTEGER NOT NULL, `endTimeEpochMilli` INTEGER NOT NULL, `distanceM` REAL, `avgHr` INTEGER, `maxHr` INTEGER, `avgPowerW` INTEGER, `normalizedPowerW` INTEGER, `calculatedLoad` INTEGER NOT NULL, `matchedPlannedWorkoutId` INTEGER, `matchStatus` TEXT NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "healthConnectRecordId",
+            "columnName": "healthConnectRecordId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "discipline",
+            "columnName": "discipline",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startTimeEpochMilli",
+            "columnName": "startTimeEpochMilli",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endTimeEpochMilli",
+            "columnName": "endTimeEpochMilli",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "distanceM",
+            "columnName": "distanceM",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "avgHr",
+            "columnName": "avgHr",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "maxHr",
+            "columnName": "maxHr",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "avgPowerW",
+            "columnName": "avgPowerW",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "normalizedPowerW",
+            "columnName": "normalizedPowerW",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "calculatedLoad",
+            "columnName": "calculatedLoad",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "matchedPlannedWorkoutId",
+            "columnName": "matchedPlannedWorkoutId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "matchStatus",
+            "columnName": "matchStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_completed_activity_healthConnectRecordId",
+            "unique": true,
+            "columnNames": [
+              "healthConnectRecordId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_completed_activity_healthConnectRecordId` ON `${TABLE_NAME}` (`healthConnectRecordId`)"
+          },
+          {
+            "name": "index_completed_activity_startTimeEpochMilli",
+            "unique": false,
+            "columnNames": [
+              "startTimeEpochMilli"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_completed_activity_startTimeEpochMilli` ON `${TABLE_NAME}` (`startTimeEpochMilli`)"
+          },
+          {
+            "name": "index_completed_activity_matchedPlannedWorkoutId",
+            "unique": false,
+            "columnNames": [
+              "matchedPlannedWorkoutId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_completed_activity_matchedPlannedWorkoutId` ON `${TABLE_NAME}` (`matchedPlannedWorkoutId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "adaptation_event",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `timestampEpochMilli` INTEGER NOT NULL, `triggerType` TEXT NOT NULL, `actionTaken` TEXT NOT NULL, `description` TEXT NOT NULL, `relatedPlannedWorkoutId` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestampEpochMilli",
+            "columnName": "timestampEpochMilli",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "triggerType",
+            "columnName": "triggerType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "actionTaken",
+            "columnName": "actionTaken",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "relatedPlannedWorkoutId",
+            "columnName": "relatedPlannedWorkoutId",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_adaptation_event_timestampEpochMilli",
+            "unique": false,
+            "columnNames": [
+              "timestampEpochMilli"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_adaptation_event_timestampEpochMilli` ON `${TABLE_NAME}` (`timestampEpochMilli`)"
+          }
+        ]
+      },
+      {
+        "tableName": "rolling_load_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`planId` INTEGER NOT NULL, `acuteLoad7d` REAL NOT NULL, `chronicLoad28d` REAL NOT NULL, `consecutiveMissedDays` INTEGER NOT NULL, `lastEvaluatedDateEpochDay` INTEGER, PRIMARY KEY(`planId`))",
+        "fields": [
+          {
+            "fieldPath": "planId",
+            "columnName": "planId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "acuteLoad7d",
+            "columnName": "acuteLoad7d",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "chronicLoad28d",
+            "columnName": "chronicLoad28d",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "consecutiveMissedDays",
+            "columnName": "consecutiveMissedDays",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastEvaluatedDateEpochDay",
+            "columnName": "lastEvaluatedDateEpochDay",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "planId"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'eab5adf87acfc0f2faf37df5778024fe')"
+    ]
+  }
+}

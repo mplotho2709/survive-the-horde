@@ -1,39 +1,52 @@
-package com.triathlonplanner.feature.today
+package com.triathlonplanner.feature.plan
 
+import com.triathlonplanner.core.model.Discipline
 import com.triathlonplanner.core.model.PlannedWorkoutSnapshot
+import com.triathlonplanner.core.model.TrainingPhase
 import com.triathlonplanner.core.model.UserZoneProfile
 import com.triathlonplanner.core.model.WorkoutStatus
+import com.triathlonplanner.core.model.WorkoutType
 import com.triathlonplanner.data.repository.ZoneKind
 import com.triathlonplanner.data.repository.ZoneResolver
+import java.time.LocalDate
 
-fun PlannedWorkoutSnapshot.toTodayView(profile: UserZoneProfile?): TodayWorkoutView {
+data class PlanWorkoutDetailView(
+    val id: Long,
+    val date: LocalDate,
+    val discipline: Discipline,
+    val workoutType: WorkoutType,
+    val status: WorkoutStatus,
+    val durationMin: Int,
+    val plannedLoad: Int,
+    val zoneLabel: String?,
+)
+
+data class PlanWeekDetailUiState(
+    val weekIndex: Int = 0,
+    val phase: TrainingPhase? = null,
+    val isRecoveryWeek: Boolean = false,
+    val plannedWeeklyLoad: Int = 0,
+    val workouts: List<PlanWorkoutDetailView> = emptyList(),
+    val isLoading: Boolean = true,
+)
+
+fun PlannedWorkoutSnapshot.toDetailView(profile: UserZoneProfile?): PlanWorkoutDetailView {
     val resolved = ZoneResolver.resolve(discipline, zone, profile)
-    // Label by which calculator actually produced the range, not by discipline - a bike zone
-    // falls back to heart rate when FTP isn't set, and labeling that fallback "W" would be wrong.
     val zoneLabel = when (resolved?.kind) {
         null -> null
         ZoneKind.PACE -> "Zone ${resolved.range.zone.level} (${formatPace(resolved.range.upperBound)}-${formatPace(resolved.range.lowerBound)} /100m)"
         ZoneKind.POWER -> "Zone ${resolved.range.zone.level} (${resolved.range.lowerBound}-${resolved.range.upperBound} W)"
         ZoneKind.HEART_RATE -> "Zone ${resolved.range.zone.level} (${resolved.range.lowerBound}-${resolved.range.upperBound} bpm)"
     }
-
-    val substitutedWith = substitutedWithDiscipline
-    val title = if (status == WorkoutStatus.SUBSTITUTED && substitutedWith != null) {
-        "Substituted: did ${substitutedWith.name.lowercase().replaceFirstChar(Char::uppercase)} instead of planned " +
-            discipline.name.lowercase().replaceFirstChar(Char::uppercase)
-    } else {
-        "${workoutType.name.lowercase().replaceFirstChar(Char::uppercase)} ${discipline.name.lowercase().replaceFirstChar(Char::uppercase)}"
-    }
-
-    return TodayWorkoutView(
+    return PlanWorkoutDetailView(
         id = id,
-        title = title,
+        date = date,
         discipline = discipline,
         workoutType = workoutType,
         status = status,
         durationMin = plannedDurationSec / 60,
+        plannedLoad = plannedLoad,
         zoneLabel = zoneLabel,
-        substitutedWithDiscipline = substitutedWithDiscipline,
     )
 }
 

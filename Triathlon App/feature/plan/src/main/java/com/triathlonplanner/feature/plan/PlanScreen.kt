@@ -1,6 +1,7 @@
 package com.triathlonplanner.feature.plan
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,7 +31,7 @@ import com.triathlonplanner.core.model.TrainingPhase
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PlanScreen(viewModel: PlanViewModel = hiltViewModel()) {
+fun PlanScreen(onWeekClick: (Int) -> Unit, viewModel: PlanViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     Scaffold(topBar = { TopAppBar(title = { Text("Plan") }) }) { padding ->
@@ -39,7 +40,9 @@ fun PlanScreen(viewModel: PlanViewModel = hiltViewModel()) {
                 state.isLoading -> CircularProgressIndicator(Modifier.padding(24.dp))
                 !state.hasActivePlan -> Text("No active plan yet.", modifier = Modifier.padding(24.dp))
                 else -> LazyColumn(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-                    items(state.weeks, key = { it.weekIndex }) { week -> WeekCard(week) }
+                    items(state.weeks, key = { it.weekIndex }) { week ->
+                        WeekCard(week, onClick = { onWeekClick(week.weekIndex) })
+                    }
                 }
             }
         }
@@ -47,8 +50,8 @@ fun PlanScreen(viewModel: PlanViewModel = hiltViewModel()) {
 }
 
 @Composable
-private fun WeekCard(week: PlanWeekUiModel) {
-    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+private fun WeekCard(week: PlanWeekUiModel, onClick: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp).clickable(onClick = onClick)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 PhaseDot(week.phase)
@@ -60,14 +63,7 @@ private fun WeekCard(week: PlanWeekUiModel) {
                 )
             }
             Text("Planned load: ${week.plannedWeeklyLoad}", style = MaterialTheme.typography.bodySmall)
-            androidx.compose.foundation.layout.Spacer(Modifier.padding(top = 8.dp))
-            week.workouts.forEach { workout ->
-                Text(
-                    "${workout.date} - ${workout.workoutType.name.lowercase().replaceFirstChar(Char::uppercase)} " +
-                        workout.discipline.name.lowercase().replaceFirstChar(Char::uppercase),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
+            Text("${week.workouts.size} sessions - tap for details", style = MaterialTheme.typography.bodySmall)
         }
     }
 }

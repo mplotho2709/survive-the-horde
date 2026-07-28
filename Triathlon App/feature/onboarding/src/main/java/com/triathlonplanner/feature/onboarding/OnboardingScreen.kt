@@ -64,6 +64,7 @@ fun OnboardingScreen(
             when (state.step) {
                 OnboardingStep.DISTANCE -> DistanceStep(state.selectedDistance, viewModel::selectDistance)
                 OnboardingStep.RACE_DATE -> RaceDateStep(viewModel::selectRaceDate)
+                OnboardingStep.TRAINING_AVAILABILITY -> TrainingAvailabilityStep(state, viewModel)
                 OnboardingStep.MAX_HR -> MaxHrStep(state, viewModel)
                 OnboardingStep.FTP_CSS -> FtpCssStep(state, viewModel)
                 OnboardingStep.HEALTH_CONNECT -> HealthConnectStep()
@@ -86,6 +87,7 @@ fun OnboardingScreen(
                 val canProceed = when (state.step) {
                     OnboardingStep.DISTANCE -> state.canProceedFromDistance
                     OnboardingStep.RACE_DATE -> state.canProceedFromDate
+                    OnboardingStep.TRAINING_AVAILABILITY -> state.canProceedFromAvailability
                     OnboardingStep.MAX_HR -> state.canProceedFromMaxHr
                     OnboardingStep.FTP_CSS -> true
                     OnboardingStep.HEALTH_CONNECT -> !state.isSaving
@@ -140,6 +142,33 @@ private fun RaceDateStep(onSelect: (java.time.LocalDate) -> Unit) {
             onSelect(Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate())
         }
     }
+}
+
+@Composable
+private fun TrainingAvailabilityStep(state: OnboardingUiState, viewModel: OnboardingViewModel) {
+    val recommended = state.selectedDistance?.let(::recommendedFor)
+    Text("How much time can you train?", style = MaterialTheme.typography.headlineSmall)
+    Spacer(Modifier.height(8.dp))
+    Text(
+        recommended?.let {
+            "Recommended for ${state.selectedDistance?.displayName}: ${it.weeklyHoursTarget}h across ${it.daysPerWeekTarget} days/week."
+        } ?: "Set a weekly hours target and how many days you can train.",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    Spacer(Modifier.height(16.dp))
+    OutlinedTextField(
+        value = state.weeklyHoursInput,
+        onValueChange = viewModel::updateWeeklyHours,
+        label = { Text("Weekly hours") },
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Spacer(Modifier.height(12.dp))
+    OutlinedTextField(
+        value = state.daysPerWeekInput,
+        onValueChange = viewModel::updateDaysPerWeek,
+        label = { Text("Days per week") },
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 @Composable

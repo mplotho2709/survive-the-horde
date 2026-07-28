@@ -19,4 +19,5 @@ data class PlannedWorkoutSnapshot(
     val zone: IntensityZone? = null,
     val brickGroupId: String? = null,
     val sortOrderInDay: Int = 0,
+    val substitutedWithDiscipline: Discipline? = null,
 )

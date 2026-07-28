@@ -124,7 +124,7 @@ object AdaptationEngine {
             }
 
             consecutiveMissedDays >= CONSECUTIVE_MISS_DAYS || missedFraction >= CONSECUTIVE_MISS_WEEK_FRACTION -> {
-                val toDrop = futurePlanned.minByOrNull(::dropPriorityRank)
+                val toDrop = futurePlanned.minByOrNull(DropPriority::rank)
                 if (toDrop != null) {
                     mutations += PlanMutation.DropWorkout(toDrop.id)
                 }
@@ -151,7 +151,7 @@ object AdaptationEngine {
                 if (rollingLoadState.acwr > SEVERE_ACWR) {
                     val nextLowPriority = futurePlanned
                         .filter { it.id != nextQuality?.id }
-                        .minByOrNull(::dropPriorityRank)
+                        .minByOrNull(DropPriority::rank)
                     if (nextLowPriority != null) {
                         mutations += PlanMutation.DowngradeToRest(nextLowPriority.id)
                     }
@@ -209,14 +209,5 @@ object AdaptationEngine {
             consecutiveMissedDays = consecutiveMissedDays,
             lastEvaluatedDate = today,
         )
-    }
-
-    /** Lower rank drops first: Strength > secondary quality > long/key session > brick legs. */
-    private fun dropPriorityRank(w: PlannedWorkoutSnapshot): Int = when {
-        w.discipline == Discipline.BRICK_BIKE || w.discipline == Discipline.BRICK_RUN -> 5
-        w.workoutType == WorkoutType.LONG || w.workoutType == WorkoutType.RACE_PACE -> 4
-        w.workoutType in setOf(WorkoutType.TEMPO, WorkoutType.THRESHOLD, WorkoutType.VO2MAX, WorkoutType.CSS_TEST, WorkoutType.FTP_TEST) -> 3
-        w.discipline == Discipline.STRENGTH -> 1
-        else -> 2
     }
 }

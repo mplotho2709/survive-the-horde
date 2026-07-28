@@ -6,6 +6,9 @@ import com.triathlonplanner.core.database.PlanWeekDao
 import com.triathlonplanner.core.database.PlannedWorkoutDao
 import com.triathlonplanner.core.database.RollingLoadStateDao
 import com.triathlonplanner.core.database.TrainingPlanDao
+import com.triathlonplanner.core.model.AdaptationAction
+import com.triathlonplanner.core.model.AdaptationEvent
+import com.triathlonplanner.core.model.AdaptationTriggerType
 import com.triathlonplanner.core.model.CompletedActivity
 import com.triathlonplanner.core.model.Discipline
 import com.triathlonplanner.core.model.MatchStatus
@@ -62,6 +65,24 @@ class ActivitySyncRepository @Inject constructor(
             .filter { it.matchStatus == MatchStatus.MATCHED }
             .mapNotNull { it.matchedPlannedWorkoutId }
             .forEach { plannedWorkoutDao.updateStatus(it, "COMPLETED") }
+
+        val substitutionEvents = matchedActivities
+            .filter { it.matchStatus == MatchStatus.SUBSTITUTED }
+            .mapNotNull { activity ->
+                val plannedId = activity.matchedPlannedWorkoutId ?: return@mapNotNull null
+                val plannedWorkout = plannedWorkoutDao.getById(plannedId) ?: return@mapNotNull null
+                plannedWorkoutDao.updateStatusWithSubstitution(plannedId, "SUBSTITUTED", activity.discipline.name)
+                AdaptationEvent(
+                    timestamp = Instant.now(),
+                    triggerType = AdaptationTriggerType.SESSION_SUBSTITUTED,
+                    actionTaken = AdaptationAction.RECORD_SUBSTITUTION,
+                    description = "Did a ${activity.discipline.name.lowercase()} instead of the planned " +
+                        "${plannedWorkout.discipline.lowercase()} - counted as a substitution, not a miss.",
+                )
+            }
+        if (substitutionEvents.isNotEmpty()) {
+            adaptationEventDao.insertAll(substitutionEvents.map { it.toEntity() })
+        }
 
         runAdaptation(plan.id)
     }

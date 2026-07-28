@@ -14,6 +14,7 @@ import androidx.health.connect.client.time.TimeRangeFilter
 import com.triathlonplanner.core.model.CompletedActivity
 import com.triathlonplanner.core.model.Discipline
 import com.triathlonplanner.domain.planengine.NormalizedPowerCalculator
+import java.time.Instant
 import javax.inject.Inject
 
 data class ChangesResult(val newOrUpdatedSessions: List<ExerciseSessionRecord>, val nextChangeToken: String)
@@ -41,6 +42,17 @@ class HealthConnectDataSource @Inject constructor(
             ),
         ),
     )
+
+    /** Historical (non-diff) read, used for both the first-ever sync backfill and the explicit
+     * "import history before this plan" backfill - the Changes API used by [getChangedSessions]
+     * only reports events going forward from token creation, so it would otherwise silently miss
+     * any session Health Connect already had before that moment. */
+    suspend fun getCompletedActivitiesSince(startTime: Instant): List<CompletedActivity> {
+        val sessions = healthConnectClient.readRecords(
+            ReadRecordsRequest(ExerciseSessionRecord::class, timeRangeFilter = TimeRangeFilter.after(startTime)),
+        ).records
+        return sessions.mapNotNull { buildCompletedActivity(it) }
+    }
 
     suspend fun getChangedSessions(changeToken: String): ChangesResult {
         val newSessions = mutableListOf<ExerciseSessionRecord>()

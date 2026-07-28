@@ -15,6 +15,7 @@ import com.triathlonplanner.core.model.MatchStatus
 import com.triathlonplanner.core.model.RollingLoadState
 import com.triathlonplanner.core.model.UserZoneProfile
 import com.triathlonplanner.data.healthconnect.CompletedActivitySink
+import com.triathlonplanner.data.healthconnect.HealthConnectDataSource
 import com.triathlonplanner.domain.planengine.AdaptationEngine
 import com.triathlonplanner.domain.planengine.LoadCalculator
 import com.triathlonplanner.domain.planengine.SessionMatcher
@@ -42,7 +43,18 @@ class ActivitySyncRepository @Inject constructor(
     private val rollingLoadStateDao: RollingLoadStateDao,
     private val profileRepository: ProfileRepository,
     private val planRepository: PlanRepository,
+    private val healthConnectDataSource: HealthConnectDataSource,
 ) : CompletedActivitySink {
+
+    /** Pulls recent Health Connect history directly (not the incremental Changes API) so training
+     * done before a plan existed - or before Health Connect was even connected - still feeds the
+     * adaptive engine's load baseline. Safe to call every time a plan is (re)created: activities
+     * are upserted by their Health Connect record id, so re-covering the same window is a no-op. */
+    suspend fun backfillHistory(days: Long = HISTORY_BACKFILL_DAYS) {
+        if (!healthConnectDataSource.hasAllPermissions()) return
+        val activities = healthConnectDataSource.getCompletedActivitiesSince(Instant.now().minus(days, ChronoUnit.DAYS))
+        if (activities.isNotEmpty()) onActivitiesSynced(activities)
+    }
 
     override suspend fun onActivitiesSynced(activities: List<CompletedActivity>) {
         if (activities.isEmpty()) return
@@ -135,5 +147,9 @@ class ActivitySyncRepository @Inject constructor(
             adaptationEventDao.insertAll(result.events.map { it.toEntity() })
         }
         rollingLoadStateDao.upsert(result.updatedRollingLoadState.toEntity(planId))
+    }
+
+    private companion object {
+        const val HISTORY_BACKFILL_DAYS = 30L
     }
 }

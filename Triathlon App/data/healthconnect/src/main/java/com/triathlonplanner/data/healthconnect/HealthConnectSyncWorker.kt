@@ -10,8 +10,11 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import com.triathlonplanner.core.model.CompletedActivity
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 
 /**
@@ -36,13 +39,24 @@ class HealthConnectSyncWorker @AssistedInject constructor(
         }
 
         return try {
-            val token = changeTokenStore.get() ?: dataSource.getChangesToken()
-            val changes = dataSource.getChangedSessions(token)
-            val activities = changes.newOrUpdatedSessions.mapNotNull { dataSource.buildCompletedActivity(it) }
+            val existingToken = changeTokenStore.get()
+            val activities: List<CompletedActivity>
+            val nextToken: String
+            if (existingToken == null) {
+                // First sync ever - backfill a bounded window directly rather than relying solely
+                // on the Changes API, which only reports events from this moment forward and would
+                // otherwise miss anything Health Connect already had before the app's first sync.
+                activities = dataSource.getCompletedActivitiesSince(Instant.now().minus(INITIAL_BACKFILL_DAYS, ChronoUnit.DAYS))
+                nextToken = dataSource.getChangesToken()
+            } else {
+                val changes = dataSource.getChangedSessions(existingToken)
+                activities = changes.newOrUpdatedSessions.mapNotNull { dataSource.buildCompletedActivity(it) }
+                nextToken = changes.nextChangeToken
+            }
             if (activities.isNotEmpty()) {
                 sink.onActivitiesSynced(activities)
             }
-            changeTokenStore.save(changes.nextChangeToken)
+            changeTokenStore.save(nextToken)
             Result.success()
         } catch (e: SecurityException) {
             // Permission was revoked externally (e.g. system settings) - nothing more to do
@@ -55,6 +69,7 @@ class HealthConnectSyncWorker @AssistedInject constructor(
 
     companion object {
         private const val UNIQUE_WORK_NAME = "health_connect_sync"
+        private const val INITIAL_BACKFILL_DAYS = 30L
 
         fun schedulePeriodic(workManager: WorkManager) {
             val request = PeriodicWorkRequestBuilder<HealthConnectSyncWorker>(8, TimeUnit.HOURS)

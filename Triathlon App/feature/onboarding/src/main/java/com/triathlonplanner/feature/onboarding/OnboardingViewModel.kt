@@ -9,6 +9,7 @@ import com.triathlonplanner.core.model.RaceGoal
 import com.triathlonplanner.core.model.TrainingAvailability
 import com.triathlonplanner.core.model.UserZoneProfile
 import com.triathlonplanner.data.healthconnect.HealthConnectDataSource
+import com.triathlonplanner.data.repository.ActivitySyncRepository
 import com.triathlonplanner.data.repository.PlanRepository
 import com.triathlonplanner.data.repository.ProfileRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -25,6 +26,7 @@ class OnboardingViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val planRepository: PlanRepository,
     private val healthConnectDataSource: HealthConnectDataSource,
+    private val activitySyncRepository: ActivitySyncRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(OnboardingUiState())
@@ -128,6 +130,10 @@ class OnboardingViewModel @Inject constructor(
                     profile,
                     LocalDate.now(),
                 )
+                // Pull in recent Health Connect history now that a plan exists to match/load
+                // against - otherwise training done before this plan (or before Health Connect
+                // was even connected) would never be stored at all.
+                activitySyncRepository.backfillHistory()
                 _uiState.update { it.copy(isSaving = false, isComplete = true) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isSaving = false, errorMessage = "Couldn't create your plan: ${e.message}") }

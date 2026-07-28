@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Three ascending bars (training progress), centered in the adaptive-icon safe zone. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,62 L42,62 L42,82 L30,82 Z
+                           M48,50 L60,50 L60,82 L48,82 Z
+                           M66,36 L78,36 L78,82 L66,82 Z" />
+</vector>

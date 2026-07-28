@@ -4,11 +4,9 @@ import com.triathlonplanner.core.model.Discipline
 import com.triathlonplanner.core.model.GeneratedPlan
 import com.triathlonplanner.core.model.GeneratedWeek
 import com.triathlonplanner.core.model.GeneratedWorkout
-import com.triathlonplanner.core.model.GeneratedWorkoutStep
 import com.triathlonplanner.core.model.RaceGoal
 import com.triathlonplanner.core.model.TrainingPhase
 import com.triathlonplanner.core.model.UserZoneProfile
-import com.triathlonplanner.core.model.WorkoutStepType
 import com.triathlonplanner.core.model.WorkoutType
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -85,7 +83,7 @@ object PlanGenerator {
                 zone = spec.zone,
                 brickGroupId = brickGroupId,
                 sortOrderInDay = spec.sortOrderInDay,
-                steps = buildSteps(spec.durationSec, spec.zone, spec.workoutType),
+                steps = WorkoutStepBuilder.build(spec.durationSec, spec.zone, spec.workoutType),
             )
             // Race day can fall on any weekday within its calendar week - never schedule a
             // "race week" shakeout session after the race has actually happened.
@@ -125,31 +123,5 @@ object PlanGenerator {
             WorkoutType.REST -> "Rest Day"
         }
         return "$typeLabel $disciplineLabel"
-    }
-
-    /** Simplified warmup/main/cooldown breakdown; no fine-grained interval sets yet. */
-    private fun buildSteps(
-        durationSec: Int,
-        zone: com.triathlonplanner.core.model.IntensityZone?,
-        workoutType: WorkoutType,
-    ): List<GeneratedWorkoutStep> {
-        if (workoutType == WorkoutType.STRENGTH_SESSION || workoutType == WorkoutType.REST) {
-            return listOf(
-                GeneratedWorkoutStep(
-                    stepOrder = 1,
-                    stepType = WorkoutStepType.MAIN,
-                    durationSec = durationSec,
-                    intensityZone = zone,
-                ),
-            )
-        }
-        val warmupSec = (durationSec * 0.10).roundToInt()
-        val cooldownSec = (durationSec * 0.10).roundToInt()
-        val mainSec = durationSec - warmupSec - cooldownSec
-        return listOf(
-            GeneratedWorkoutStep(1, WorkoutStepType.WARMUP, warmupSec, intensityZone = com.triathlonplanner.core.model.IntensityZone(1)),
-            GeneratedWorkoutStep(2, WorkoutStepType.MAIN, mainSec, intensityZone = zone),
-            GeneratedWorkoutStep(3, WorkoutStepType.COOLDOWN, cooldownSec, intensityZone = com.triathlonplanner.core.model.IntensityZone(1)),
-        )
     }
 }

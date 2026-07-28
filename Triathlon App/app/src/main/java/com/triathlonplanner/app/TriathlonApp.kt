@@ -18,6 +18,8 @@ class TriathlonApp : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        NotificationChannels.createChannels(this)
         HealthConnectSyncWorker.schedulePeriodic(WorkManager.getInstance(this))
+        DailyReminderWorker.schedule(WorkManager.getInstance(this))
     }
 }

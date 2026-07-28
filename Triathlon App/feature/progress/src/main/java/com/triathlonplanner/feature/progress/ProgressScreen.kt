@@ -1,15 +1,20 @@
 package com.triathlonplanner.feature.progress
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -19,9 +24,15 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.triathlonplanner.core.model.WeeklyLoadPoint
@@ -39,7 +50,8 @@ fun ProgressScreen(viewModel: ProgressViewModel = hiltViewModel()) {
                 LazyColumn(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                     item {
                         Text("Weekly load: planned vs. completed", style = MaterialTheme.typography.titleMedium)
-                        WeeklyLoadChart(state.weeklyLoad, modifier = Modifier.fillMaxWidth().height(200.dp).padding(vertical = 12.dp))
+                        ChartLegend(modifier = Modifier.padding(top = 8.dp))
+                        WeeklyLoadChart(state.weeklyLoad, modifier = Modifier.fillMaxWidth().height(220.dp).padding(top = 8.dp))
                     }
                     item {
                         Text("Why did my plan change?", style = MaterialTheme.typography.titleMedium)
@@ -62,6 +74,23 @@ fun ProgressScreen(viewModel: ProgressViewModel = hiltViewModel()) {
 }
 
 @Composable
+private fun ChartLegend(modifier: Modifier = Modifier) {
+    Row(modifier = modifier, horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)) {
+        LegendEntry(MaterialTheme.colorScheme.primary, "Planned")
+        LegendEntry(MaterialTheme.colorScheme.tertiary, "Completed")
+    }
+}
+
+@Composable
+private fun LegendEntry(color: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.size(10.dp).background(color, CircleShape))
+        Spacer(Modifier.width(6.dp))
+        Text(label, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+@Composable
 private fun WeeklyLoadChart(points: List<WeeklyLoadPoint>, modifier: Modifier = Modifier) {
     if (points.isEmpty()) {
         Text("Not enough data yet.", modifier = modifier)
@@ -70,24 +99,40 @@ private fun WeeklyLoadChart(points: List<WeeklyLoadPoint>, modifier: Modifier = 
     val maxLoad = (points.maxOf { maxOf(it.plannedLoad, it.completedLoad) }).coerceAtLeast(1)
     val plannedColor = MaterialTheme.colorScheme.primary
     val completedColor = MaterialTheme.colorScheme.tertiary
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val textMeasurer = rememberTextMeasurer()
+    val axisLabelSizePx = with(androidx.compose.ui.platform.LocalDensity.current) { 11.sp.toPx() }
 
     Canvas(modifier = modifier) {
+        val axisLabelHeight = axisLabelSizePx * 1.6f
+        val barAreaHeight = size.height - axisLabelHeight
         val barGroupWidth = size.width / points.size
         val barWidth = barGroupWidth * 0.35f
+
         points.forEachIndexed { index, point ->
             val groupStart = index * barGroupWidth
-            val plannedHeight = size.height * (point.plannedLoad.toFloat() / maxLoad)
-            val completedHeight = size.height * (point.completedLoad.toFloat() / maxLoad)
+            val plannedHeight = barAreaHeight * (point.plannedLoad.toFloat() / maxLoad)
+            val completedHeight = barAreaHeight * (point.completedLoad.toFloat() / maxLoad)
 
             drawRect(
                 color = plannedColor,
-                topLeft = androidx.compose.ui.geometry.Offset(groupStart + barGroupWidth * 0.1f, size.height - plannedHeight),
-                size = androidx.compose.ui.geometry.Size(barWidth, plannedHeight),
+                topLeft = Offset(groupStart + barGroupWidth * 0.1f, barAreaHeight - plannedHeight),
+                size = Size(barWidth, plannedHeight),
             )
             drawRect(
                 color = completedColor,
-                topLeft = androidx.compose.ui.geometry.Offset(groupStart + barGroupWidth * 0.55f, size.height - completedHeight),
-                size = androidx.compose.ui.geometry.Size(barWidth, completedHeight),
+                topLeft = Offset(groupStart + barGroupWidth * 0.55f, barAreaHeight - completedHeight),
+                size = Size(barWidth, completedHeight),
+            )
+
+            val label = "W${point.weekIndex}"
+            val measured = textMeasurer.measure(
+                label,
+                style = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = labelColor),
+            )
+            drawText(
+                measured,
+                topLeft = Offset(groupStart + barGroupWidth / 2 - measured.size.width / 2, barAreaHeight + axisLabelHeight * 0.2f),
             )
         }
     }

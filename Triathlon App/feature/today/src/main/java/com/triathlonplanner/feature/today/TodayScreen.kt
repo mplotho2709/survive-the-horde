@@ -1,5 +1,6 @@
 package com.triathlonplanner.feature.today
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,7 +34,7 @@ import com.triathlonplanner.core.model.WorkoutStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TodayScreen(viewModel: TodayViewModel = hiltViewModel()) {
+fun TodayScreen(onWorkoutClick: (Long) -> Unit, viewModel: TodayViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     Scaffold(topBar = { TopAppBar(title = { Text("Today") }) }) { padding ->
@@ -46,7 +47,7 @@ fun TodayScreen(viewModel: TodayViewModel = hiltViewModel()) {
                 )
                 else -> LazyColumn(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                     items(state.workouts, key = { it.id }) { workout ->
-                        WorkoutCard(workout)
+                        WorkoutCard(workout, onClick = { onWorkoutClick(workout.id) })
                     }
                 }
             }
@@ -55,8 +56,8 @@ fun TodayScreen(viewModel: TodayViewModel = hiltViewModel()) {
 }
 
 @Composable
-private fun WorkoutCard(workout: TodayWorkoutView) {
-    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+private fun WorkoutCard(workout: TodayWorkoutView, onClick: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp).clickable(onClick = onClick)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Column {
                 androidx.compose.foundation.layout.Row(

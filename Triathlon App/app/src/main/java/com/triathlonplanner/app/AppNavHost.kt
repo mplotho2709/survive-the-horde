@@ -35,6 +35,7 @@ import com.triathlonplanner.feature.plan.PlanWeekDetailScreen
 import com.triathlonplanner.feature.profile.ProfileScreen
 import com.triathlonplanner.feature.progress.ProgressScreen
 import com.triathlonplanner.feature.today.TodayScreen
+import com.triathlonplanner.feature.today.TodayWorkoutDetailScreen
 
 private data class BottomTab(val route: Route, val label: String, val icon: ImageVector)
 
@@ -68,7 +69,9 @@ private fun MainScaffold() {
             startDestination = Route.Today.route,
             modifier = Modifier.padding(padding),
         ) {
-            composable(Route.Today.route) { TodayScreen() }
+            composable(Route.Today.route) {
+                TodayScreen(onWorkoutClick = { workoutId -> navController.navigate(Route.TodayWorkoutDetail.buildRoute(workoutId)) })
+            }
             composable(Route.Plan.route) {
                 PlanScreen(onWeekClick = { weekIndex -> navController.navigate(Route.PlanWeekDetail.buildRoute(weekIndex)) })
             }
@@ -79,6 +82,12 @@ private fun MainScaffold() {
                 arguments = listOf(navArgument("weekIndex") { type = NavType.IntType }),
             ) {
                 PlanWeekDetailScreen(onBack = { navController.popBackStack() })
+            }
+            composable(
+                Route.TodayWorkoutDetail.route,
+                arguments = listOf(navArgument("workoutId") { type = NavType.LongType }),
+            ) {
+                TodayWorkoutDetailScreen(onBack = { navController.popBackStack() })
             }
         }
     }

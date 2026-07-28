@@ -63,4 +63,7 @@ interface PlannedWorkoutDao {
 
     @Query("SELECT * FROM planned_workout WHERE id = :id")
     suspend fun getById(id: Long): PlannedWorkoutEntity?
+
+    @Query("SELECT * FROM planned_workout WHERE id = :id")
+    fun observeById(id: Long): Flow<PlannedWorkoutEntity?>
 }

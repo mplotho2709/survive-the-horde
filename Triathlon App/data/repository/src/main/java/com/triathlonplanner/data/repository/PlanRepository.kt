@@ -1,5 +1,6 @@
 package com.triathlonplanner.data.repository
 
+import com.triathlonplanner.core.database.CompletedActivityDao
 import com.triathlonplanner.core.database.PlanWeekDao
 import com.triathlonplanner.core.database.PlanWeekEntity
 import com.triathlonplanner.core.database.PlannedWorkoutDao
@@ -9,6 +10,7 @@ import com.triathlonplanner.core.database.TrainingPlanEntity
 import com.triathlonplanner.core.database.WorkoutStepDao
 import com.triathlonplanner.core.database.WorkoutStepEntity
 import com.triathlonplanner.core.model.ActivePlanSummary
+import com.triathlonplanner.core.model.CompletedActivity
 import com.triathlonplanner.core.model.PlanMutation
 import com.triathlonplanner.core.model.PlanWeekSummary
 import com.triathlonplanner.core.model.PlannedWorkoutSnapshot
@@ -16,6 +18,7 @@ import com.triathlonplanner.core.model.RaceGoal
 import com.triathlonplanner.core.model.UserZoneProfile
 import com.triathlonplanner.domain.planengine.PlanGenerator
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.time.Instant
@@ -29,6 +32,7 @@ class PlanRepository @Inject constructor(
     private val planWeekDao: PlanWeekDao,
     private val plannedWorkoutDao: PlannedWorkoutDao,
     private val workoutStepDao: WorkoutStepDao,
+    private val completedActivityDao: CompletedActivityDao,
     private val raceGoalRepository: RaceGoalRepository,
 ) {
     fun observeActivePlan(): Flow<ActivePlanSummary?> = trainingPlanDao.observeActive().map { it?.toDomain() }
@@ -43,6 +47,14 @@ class PlanRepository @Inject constructor(
 
     fun observeWorkoutsForDate(date: LocalDate): Flow<List<PlannedWorkoutSnapshot>> =
         plannedWorkoutDao.observeForDate(date.toEpochDay()).map { workouts -> workouts.map { it.toSnapshot(weekIndex = 0) } }
+
+    /** Planned session plus whichever completed activity SessionMatcher matched (or substituted)
+     * against it, if any - the pairing that powers the Today screen's "planned vs actual" detail. */
+    fun observeWorkoutDetail(workoutId: Long): Flow<Pair<PlannedWorkoutSnapshot?, CompletedActivity?>> =
+        combine(
+            plannedWorkoutDao.observeById(workoutId).map { it?.toSnapshot(weekIndex = 0) },
+            completedActivityDao.observeMatchedActivity(workoutId).map { it?.toDomain() },
+        ) { planned, activity -> planned to activity }
 
     /** Generates a fresh plan via PlanGenerator and persists the full week/workout/step hierarchy. */
     suspend fun createPlanForGoal(raceGoal: RaceGoal, profile: UserZoneProfile, startDate: LocalDate): Long {

@@ -29,4 +29,7 @@ interface CompletedActivityDao {
 
     @Query("SELECT * FROM completed_activity WHERE startTimeEpochMilli >= :startEpochMilli AND startTimeEpochMilli < :endEpochMilli")
     suspend fun getInRange(startEpochMilli: Long, endEpochMilli: Long): List<CompletedActivityEntity>
+
+    @Query("SELECT * FROM completed_activity WHERE matchedPlannedWorkoutId = :workoutId ORDER BY startTimeEpochMilli LIMIT 1")
+    fun observeMatchedActivity(workoutId: Long): Flow<CompletedActivityEntity?>
 }

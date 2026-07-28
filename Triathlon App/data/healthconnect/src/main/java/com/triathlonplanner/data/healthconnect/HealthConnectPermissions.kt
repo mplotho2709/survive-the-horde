@@ -15,6 +15,11 @@ import androidx.health.connect.client.records.SpeedRecord
  * Read-only permission set. Cadence is intentionally not requested as its own permission - per
  * Health Connect's permission model, CyclingPedalingCadenceRecord is covered by the Exercise
  * permission already requested here.
+ *
+ * PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND is required for the periodic safety-net sync
+ * (HealthConnectSyncWorker's 8-hourly run) to actually read anything - without it, Health Connect
+ * silently returns empty results to any read that isn't happening while the app is foregrounded,
+ * which would make the periodic worker a permanent no-op for anyone who doesn't open the app daily.
  */
 object HealthConnectPermissions {
     val REQUIRED: Set<String> = setOf(
@@ -23,6 +28,7 @@ object HealthConnectPermissions {
         HealthPermission.getReadPermission(PowerRecord::class),
         HealthPermission.getReadPermission(SpeedRecord::class),
         HealthPermission.getReadPermission(DistanceRecord::class),
+        HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND,
     )
 }
 

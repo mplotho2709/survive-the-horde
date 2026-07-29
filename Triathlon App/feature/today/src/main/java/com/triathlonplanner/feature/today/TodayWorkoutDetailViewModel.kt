@@ -24,12 +24,14 @@ class TodayWorkoutDetailViewModel @Inject constructor(
     val uiState: StateFlow<TodayWorkoutDetailUiState> = combine(
         planRepository.observeWorkoutDetail(workoutId),
         profileRepository.observeProfile(),
-    ) { (planned, activity), profile ->
+        planRepository.observeStepsForWorkout(workoutId),
+    ) { (planned, activity), profile, steps ->
         if (planned == null) {
             TodayWorkoutDetailUiState(isLoading = false, notFound = true)
         } else {
             TodayWorkoutDetailUiState(
                 planned = planned.toTodayView(profile),
+                steps = steps.sortedBy { it.stepOrder }.map { it.toStepView(planned.discipline, profile) },
                 actual = activity?.toActualView(),
                 isLoading = false,
             )

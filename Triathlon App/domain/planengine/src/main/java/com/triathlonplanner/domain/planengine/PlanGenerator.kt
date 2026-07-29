@@ -83,7 +83,7 @@ object PlanGenerator {
                 zone = spec.zone,
                 brickGroupId = brickGroupId,
                 sortOrderInDay = spec.sortOrderInDay,
-                steps = WorkoutStepBuilder.build(spec.durationSec, spec.zone, spec.workoutType),
+                steps = WorkoutStepBuilder.build(spec.durationSec, spec.zone, spec.workoutType, spec.discipline),
             )
             // Race day can fall on any weekday within its calendar week - never schedule a
             // "race week" shakeout session after the race has actually happened.

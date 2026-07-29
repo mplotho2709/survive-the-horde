@@ -11,6 +11,7 @@ import com.triathlonplanner.core.database.WorkoutStepDao
 import com.triathlonplanner.core.database.WorkoutStepEntity
 import com.triathlonplanner.core.model.ActivePlanSummary
 import com.triathlonplanner.core.model.CompletedActivity
+import com.triathlonplanner.core.model.GeneratedWorkoutStep
 import com.triathlonplanner.core.model.PlanMutation
 import com.triathlonplanner.core.model.PlanWeekSummary
 import com.triathlonplanner.core.model.PlannedWorkoutSnapshot
@@ -55,6 +56,9 @@ class PlanRepository @Inject constructor(
             plannedWorkoutDao.observeById(workoutId).map { it?.toSnapshot(weekIndex = 0) },
             completedActivityDao.observeMatchedActivity(workoutId).map { it?.toDomain() },
         ) { planned, activity -> planned to activity }
+
+    fun observeStepsForWorkout(workoutId: Long): Flow<List<GeneratedWorkoutStep>> =
+        workoutStepDao.observeForWorkout(workoutId).map { steps -> steps.map { it.toDomain() } }
 
     /** Generates a fresh plan via PlanGenerator and persists the full week/workout/step hierarchy. */
     suspend fun createPlanForGoal(raceGoal: RaceGoal, profile: UserZoneProfile, startDate: LocalDate): Long {
@@ -116,6 +120,7 @@ class PlanRepository @Inject constructor(
                                 distanceM = step.distanceM,
                                 intensityZoneLevel = step.intensityZone?.level,
                                 repeatCount = step.repeatCount,
+                                cueText = step.cueText,
                             )
                         },
                     )

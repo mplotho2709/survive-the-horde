@@ -26,4 +26,5 @@ data class WorkoutStepEntity(
     val distanceM: Int?,
     val intensityZoneLevel: Int?,
     val repeatCount: Int?,
+    val cueText: String? = null,
 )

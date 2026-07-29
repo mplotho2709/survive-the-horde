@@ -6,6 +6,7 @@ import com.triathlonplanner.core.model.IntensityZone
 import com.triathlonplanner.core.model.TrainingAvailability
 import com.triathlonplanner.core.model.TrainingPhase
 import com.triathlonplanner.core.model.WorkoutType
+import kotlin.math.roundToInt
 
 /** A single session, positioned within its week but not yet dated (PlanGenerator assigns dates). */
 data class WorkoutSpec(
@@ -59,6 +60,31 @@ object WeeklyTemplate {
     // Every generated session is at least this long - a sub-30-minute session isn't useful training.
     private const val MIN_SESSION_DURATION_SEC = 30 * 60
 
+    // Total session length (incl. warmup/cooldown) for standalone quality sessions - THRESHOLD,
+    // VO2MAX, TEMPO(sweet-spot), and non-brick RACE_PACE. Unlike aerobic volume, intensity dosing
+    // doesn't scale linearly with weekly hours - roughly 20-24min of accumulated near-threshold
+    // work or 15-20min of true VO2max work per session is already a full, honest dose for an
+    // age-group triathlete. Landed at/above MIN_SESSION_DURATION_SEC so that floor is a
+    // non-issue here rather than a silent override.
+    private val HIGH_INTENSITY_TOTAL_MINUTES = mapOf(
+        TrainingPhase.BUILD to 35,
+        TrainingPhase.PEAK to 32,
+        TrainingPhase.TAPER to 30,
+    )
+
+    // Brick run-off leg specifically - shorter, and physiologically distinct from a standalone
+    // quality session (neuromuscular adaptation to running on fatigued legs, not volume).
+    private val BRICK_RUN_OFF_TOTAL_MINUTES = mapOf(
+        TrainingPhase.BUILD to 30,
+        TrainingPhase.PEAK to 35,
+    )
+
+    /** Mildly nudged by hoursScale (a much fitter/higher-volume athlete can absorb somewhat more)
+     * but clamped to a narrow band so intensity dosing never approaches the aerobic sessions'
+     * much wider hoursScale range. */
+    private fun boundedHighIntensitySec(baseMinutes: Int, hoursScale: Double): Int =
+        (baseMinutes * hoursScale.coerceIn(0.85, 1.25) * 60).roundToInt()
+
     fun sessionsFor(distance: Distance, phase: TrainingPhase, availability: TrainingAvailability? = null): List<WorkoutSpec> {
         val peak = PEAK_LONG_DURATIONS.getValue(distance)
         val scale = PHASE_SCALE.getValue(phase)
@@ -74,13 +100,15 @@ object WeeklyTemplate {
         val otherBikeSec = (longBikeSec * 0.45).toInt().coerceAtLeast(MIN_SESSION_DURATION_SEC)
         val otherRunSec = (longRunSec * 0.55).toInt().coerceAtLeast(MIN_SESSION_DURATION_SEC)
         val otherSwimSec = (longSwimSec * 0.70).toInt().coerceAtLeast(MIN_SESSION_DURATION_SEC)
+        val hardSec = HIGH_INTENSITY_TOTAL_MINUTES[phase]?.let { boundedHighIntensitySec(it, hoursScale) } ?: 0
+        val brickRunOffSec = BRICK_RUN_OFF_TOTAL_MINUTES[phase]?.let { boundedHighIntensitySec(it, hoursScale) } ?: 0
 
         val sessions = when (phase) {
             TrainingPhase.RACE_WEEK -> raceWeekSessions(otherSwimSec, otherBikeSec, otherRunSec)
-            TrainingPhase.TAPER -> taperSessions(otherSwimSec, otherBikeSec, otherRunSec, longRunSec)
+            TrainingPhase.TAPER -> taperSessions(otherSwimSec, otherBikeSec, longRunSec, hardSec)
             TrainingPhase.BASE -> baseSessions(otherSwimSec, otherBikeSec, otherRunSec, longBikeSec, longRunSec)
-            TrainingPhase.BUILD -> buildSessions(distance, otherSwimSec, otherBikeSec, otherRunSec, longBikeSec, longRunSec)
-            TrainingPhase.PEAK -> peakSessions(distance, otherSwimSec, otherBikeSec, otherRunSec, longBikeSec, longRunSec)
+            TrainingPhase.BUILD -> buildSessions(distance, otherSwimSec, otherBikeSec, longBikeSec, longRunSec, hardSec, brickRunOffSec)
+            TrainingPhase.PEAK -> peakSessions(distance, otherSwimSec, longBikeSec, hardSec, brickRunOffSec)
         }.map { it.copy(durationSec = it.durationSec.coerceAtLeast(MIN_SESSION_DURATION_SEC)) }
         return applyDayCap(sessions, availability?.daysPerWeekTarget)
     }
@@ -118,50 +146,46 @@ object WeeklyTemplate {
         distance: Distance,
         swimSec: Int,
         bikeSec: Int,
-        runSec: Int,
         longBikeSec: Int,
         longRunSec: Int,
-    ): List<WorkoutSpec> {
-        val brickBikeSec = (longBikeSec * 0.5).toInt()
-        val brickRunSec = (longRunSec * 0.4).toInt().coerceAtLeast(15 * 60)
-        return listOf(
-            WorkoutSpec(1, Discipline.SWIM, WorkoutType.EASY, swimSec, zone = IntensityZone(2)),
-            WorkoutSpec(3, Discipline.SWIM, WorkoutType.THRESHOLD, swimSec, zone = IntensityZone(3)),
-            WorkoutSpec(2, Discipline.BIKE, WorkoutType.EASY, bikeSec, zone = IntensityZone(2)),
-            WorkoutSpec(4, Discipline.STRENGTH, WorkoutType.STRENGTH_SESSION, 40 * 60),
-            WorkoutSpec(5, Discipline.RUN, WorkoutType.THRESHOLD, runSec, zone = IntensityZone(4)),
-            WorkoutSpec(6, Discipline.BRICK_BIKE, WorkoutType.TEMPO, brickBikeSec, zone = IntensityZone(3), isBrickLeg = true, sortOrderInDay = 0),
-            WorkoutSpec(6, Discipline.BRICK_RUN, WorkoutType.RACE_PACE, brickRunSec, zone = raceZoneFor(distance), isBrickLeg = true, sortOrderInDay = 1),
-            WorkoutSpec(7, Discipline.RUN, WorkoutType.LONG, longRunSec, zone = IntensityZone(1)),
-        )
-    }
+        hardSec: Int,
+        brickRunOffSec: Int,
+    ): List<WorkoutSpec> = listOf(
+        WorkoutSpec(1, Discipline.SWIM, WorkoutType.EASY, swimSec, zone = IntensityZone(2)),
+        // Zone 4 = "Threshold" per this app's own 5-zone labels - a session literally named
+        // THRESHOLD belongs there, not in Zone 3 ("Tempo"), which was inflating the grey zone.
+        WorkoutSpec(3, Discipline.SWIM, WorkoutType.THRESHOLD, hardSec, zone = IntensityZone(4)),
+        WorkoutSpec(2, Discipline.BIKE, WorkoutType.EASY, bikeSec, zone = IntensityZone(2)),
+        WorkoutSpec(4, Discipline.STRENGTH, WorkoutType.STRENGTH_SESSION, 40 * 60),
+        WorkoutSpec(5, Discipline.RUN, WorkoutType.THRESHOLD, hardSec, zone = IntensityZone(4)),
+        WorkoutSpec(6, Discipline.BRICK_BIKE, WorkoutType.TEMPO, hardSec, zone = IntensityZone(3), isBrickLeg = true, sortOrderInDay = 0),
+        WorkoutSpec(6, Discipline.BRICK_RUN, WorkoutType.RACE_PACE, brickRunOffSec, zone = raceZoneFor(distance), isBrickLeg = true, sortOrderInDay = 1),
+        WorkoutSpec(7, Discipline.RUN, WorkoutType.LONG, longRunSec, zone = IntensityZone(1)),
+    )
 
     private fun peakSessions(
         distance: Distance,
         swimSec: Int,
-        bikeSec: Int,
-        runSec: Int,
         longBikeSec: Int,
-        longRunSec: Int,
+        hardSec: Int,
+        brickRunOffSec: Int,
     ): List<WorkoutSpec> {
-        val brickBikeSec = (longBikeSec * 0.6).toInt()
-        val brickRunSec = (longRunSec * 0.45).toInt().coerceAtLeast(15 * 60)
         val raceZone = raceZoneFor(distance)
         return listOf(
             WorkoutSpec(1, Discipline.SWIM, WorkoutType.EASY, swimSec, zone = IntensityZone(2)),
-            WorkoutSpec(3, Discipline.SWIM, WorkoutType.RACE_PACE, swimSec, zone = IntensityZone(3)),
-            WorkoutSpec(2, Discipline.BIKE, WorkoutType.VO2MAX, bikeSec, zone = IntensityZone(5)),
-            WorkoutSpec(5, Discipline.RUN, WorkoutType.RACE_PACE, runSec, zone = raceZone),
-            WorkoutSpec(6, Discipline.BRICK_BIKE, WorkoutType.RACE_PACE, brickBikeSec, zone = raceZone, isBrickLeg = true, sortOrderInDay = 0),
-            WorkoutSpec(6, Discipline.BRICK_RUN, WorkoutType.RACE_PACE, brickRunSec, zone = raceZone, isBrickLeg = true, sortOrderInDay = 1),
+            WorkoutSpec(3, Discipline.SWIM, WorkoutType.RACE_PACE, hardSec, zone = IntensityZone(3)),
+            WorkoutSpec(2, Discipline.BIKE, WorkoutType.VO2MAX, hardSec, zone = IntensityZone(5)),
+            WorkoutSpec(5, Discipline.RUN, WorkoutType.RACE_PACE, hardSec, zone = raceZone),
+            WorkoutSpec(6, Discipline.BRICK_BIKE, WorkoutType.RACE_PACE, hardSec, zone = raceZone, isBrickLeg = true, sortOrderInDay = 0),
+            WorkoutSpec(6, Discipline.BRICK_RUN, WorkoutType.RACE_PACE, brickRunOffSec, zone = raceZone, isBrickLeg = true, sortOrderInDay = 1),
             WorkoutSpec(7, Discipline.BIKE, WorkoutType.LONG, longBikeSec, zone = IntensityZone(2)),
         )
     }
 
-    private fun taperSessions(swimSec: Int, bikeSec: Int, runSec: Int, longRunSec: Int): List<WorkoutSpec> = listOf(
+    private fun taperSessions(swimSec: Int, bikeSec: Int, longRunSec: Int, hardSec: Int): List<WorkoutSpec> = listOf(
         WorkoutSpec(1, Discipline.SWIM, WorkoutType.EASY, (swimSec * 0.6).toInt(), zone = IntensityZone(1)),
         WorkoutSpec(3, Discipline.BIKE, WorkoutType.EASY, (bikeSec * 0.6).toInt(), zone = IntensityZone(2)),
-        WorkoutSpec(4, Discipline.RUN, WorkoutType.RACE_PACE, (runSec * 0.4).toInt(), zone = IntensityZone(3)),
+        WorkoutSpec(4, Discipline.RUN, WorkoutType.RACE_PACE, hardSec, zone = IntensityZone(3)),
         WorkoutSpec(6, Discipline.BIKE, WorkoutType.EASY, (bikeSec * 0.5).toInt(), zone = IntensityZone(1)),
         WorkoutSpec(7, Discipline.RUN, WorkoutType.EASY, (longRunSec * 0.35).toInt(), zone = IntensityZone(1)),
     )

@@ -29,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.triathlonplanner.core.model.Discipline
 import com.triathlonplanner.core.model.MatchStatus
 import com.triathlonplanner.core.model.WorkoutStatus
+import com.triathlonplanner.core.model.WorkoutStepType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,7 +58,7 @@ fun TodayWorkoutDetailScreen(onBack: () -> Unit, viewModel: TodayWorkoutDetailVi
                         .padding(16.dp)
                         .verticalScroll(rememberScrollState()),
                 ) {
-                    PlannedCard(state.planned!!)
+                    PlannedCard(state.planned!!, state.steps)
                     Spacer(Modifier.height(12.dp))
                     ActualCard(state.planned!!.status, state.actual)
                 }
@@ -67,7 +68,7 @@ fun TodayWorkoutDetailScreen(onBack: () -> Unit, viewModel: TodayWorkoutDetailVi
 }
 
 @Composable
-private fun PlannedCard(planned: TodayWorkoutView) {
+private fun PlannedCard(planned: TodayWorkoutView, steps: List<StepView>) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("Planned", style = MaterialTheme.typography.titleMedium)
@@ -77,7 +78,28 @@ private fun PlannedCard(planned: TodayWorkoutView) {
             planned.zoneLabel?.let {
                 Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
             }
+            if (steps.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                steps.forEach { StepRow(it) }
+            }
         }
+    }
+}
+
+@Composable
+private fun StepRow(step: StepView) {
+    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+        val label = when (step.stepType) {
+            WorkoutStepType.WARMUP -> "Warmup"
+            WorkoutStepType.DRILL -> "Drill"
+            WorkoutStepType.MAIN -> "Main set"
+            WorkoutStepType.INTERVAL -> "Interval" + (step.repeatCount?.let { " (${it}x)" } ?: "")
+            WorkoutStepType.RECOVERY -> "Recovery" + (step.repeatCount?.let { " (${it}x)" } ?: "")
+            WorkoutStepType.COOLDOWN -> "Cooldown"
+        }
+        Text("$label - ${step.durationMin} min", style = MaterialTheme.typography.bodyMedium)
+        step.zoneLabel?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
+        step.cueText?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
 

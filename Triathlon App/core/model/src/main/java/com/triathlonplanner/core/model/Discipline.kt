@@ -44,6 +44,7 @@ enum class WorkoutStatus {
 enum class WorkoutStepType {
     WARMUP,
     MAIN,
+    DRILL,
     INTERVAL,
     RECOVERY,
     COOLDOWN,

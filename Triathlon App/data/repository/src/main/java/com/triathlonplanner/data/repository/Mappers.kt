@@ -9,6 +9,7 @@ import com.triathlonplanner.core.database.RaceGoalEntity
 import com.triathlonplanner.core.database.RollingLoadStateEntity
 import com.triathlonplanner.core.database.TrainingPlanEntity
 import com.triathlonplanner.core.database.UserProfileEntity
+import com.triathlonplanner.core.database.WorkoutStepEntity
 import com.triathlonplanner.core.model.ActivePlanSummary
 import com.triathlonplanner.core.model.AdaptationEvent
 import com.triathlonplanner.core.model.AdaptationAction
@@ -18,6 +19,7 @@ import com.triathlonplanner.core.model.CssSource
 import com.triathlonplanner.core.model.Discipline
 import com.triathlonplanner.core.model.Distance
 import com.triathlonplanner.core.model.FtpSource
+import com.triathlonplanner.core.model.GeneratedWorkoutStep
 import com.triathlonplanner.core.model.IntensityZone
 import com.triathlonplanner.core.model.MatchStatus
 import com.triathlonplanner.core.model.PlanStatus
@@ -29,6 +31,7 @@ import com.triathlonplanner.core.model.TrainingAvailability
 import com.triathlonplanner.core.model.TrainingPhase
 import com.triathlonplanner.core.model.UserZoneProfile
 import com.triathlonplanner.core.model.WorkoutStatus
+import com.triathlonplanner.core.model.WorkoutStepType
 import com.triathlonplanner.core.model.WorkoutType
 import java.time.Instant
 import java.time.LocalDate
@@ -182,4 +185,14 @@ fun PlannedWorkoutEntity.toSnapshot(weekIndex: Int): PlannedWorkoutSnapshot = Pl
     brickGroupId = brickGroupId,
     sortOrderInDay = sortOrderInDay,
     substitutedWithDiscipline = substitutedDiscipline?.let { Discipline.valueOf(it) },
+)
+
+fun WorkoutStepEntity.toDomain(): GeneratedWorkoutStep = GeneratedWorkoutStep(
+    stepOrder = stepOrder,
+    stepType = WorkoutStepType.valueOf(stepType),
+    durationSec = durationSec,
+    distanceM = distanceM,
+    intensityZone = intensityZoneLevel?.let { IntensityZone(it) },
+    repeatCount = repeatCount,
+    cueText = cueText,
 )

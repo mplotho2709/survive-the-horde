@@ -41,4 +41,5 @@ data class GeneratedWorkoutStep(
     val distanceM: Int? = null,
     val intensityZone: IntensityZone? = null,
     val repeatCount: Int? = null,
+    val cueText: String? = null,
 )

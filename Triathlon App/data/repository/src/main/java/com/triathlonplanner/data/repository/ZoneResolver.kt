@@ -19,9 +19,10 @@ data class ResolvedZone(val range: ZoneRange, val kind: ZoneKind)
  * Resolves a workout's stored (discipline, zone) pair into concrete bpm/watts/pace numbers using
  * the *current* profile - this is what makes editing max HR/FTP later re-contextualize the whole
  * plan instead of leaving stale numbers baked into old rows (see the plan's "store zones as
- * relative" decision). Returns null when the profile lacks what that discipline needs (e.g. a
- * swim zone requested but no CSS pace set - there's no HR fallback for swim, see PlanGenerator's
- * rationale for why swim is pace-based only).
+ * relative" decision). Bike falls back to heart rate when FTP isn't set, and swim falls back to
+ * heart rate when CSS isn't set - HR response in swimming is dampened/delayed relative to pace
+ * (see SwimPaceZoneCalculator's docs), so this is a deliberately rougher approximation, but a
+ * heart-rate-based target still beats showing the user no zone at all until they run a CSS test.
  */
 object ZoneResolver {
 
@@ -34,7 +35,9 @@ object ZoneResolver {
                     ?: ResolvedZone(HrZoneCalculator.zoneFor(profile.maxHr, profile.restingHr, zone), ZoneKind.HEART_RATE)
 
             Discipline.SWIM ->
-                profile.cssPaceSecPer100m?.let { ResolvedZone(SwimPaceZoneCalculator.zoneFor(it, zone), ZoneKind.PACE) }
+                profile.cssPaceSecPer100m
+                    ?.let { ResolvedZone(SwimPaceZoneCalculator.zoneFor(it, zone), ZoneKind.PACE) }
+                    ?: ResolvedZone(HrZoneCalculator.zoneFor(profile.maxHr, profile.restingHr, zone), ZoneKind.HEART_RATE)
 
             Discipline.RUN, Discipline.BRICK_RUN, Discipline.STRENGTH ->
                 ResolvedZone(HrZoneCalculator.zoneFor(profile.maxHr, profile.restingHr, zone), ZoneKind.HEART_RATE)

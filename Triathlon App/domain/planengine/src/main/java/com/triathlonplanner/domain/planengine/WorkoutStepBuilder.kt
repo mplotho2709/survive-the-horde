@@ -3,6 +3,7 @@ package com.triathlonplanner.domain.planengine
 import com.triathlonplanner.core.model.Discipline
 import com.triathlonplanner.core.model.GeneratedWorkoutStep
 import com.triathlonplanner.core.model.IntensityZone
+import com.triathlonplanner.core.model.UserZoneProfile
 import com.triathlonplanner.core.model.WorkoutStepType
 import com.triathlonplanner.core.model.WorkoutType
 import kotlin.math.roundToInt
@@ -33,9 +34,24 @@ object WorkoutStepBuilder {
         WorkoutType.TEMPO to IntervalPattern(workSec = 12 * 60, recoverySec = 3 * 60), // 12min on/3min off, sweet-spot-style
     )
 
-    fun build(durationSec: Int, zone: IntensityZone?, workoutType: WorkoutType, discipline: Discipline): List<GeneratedWorkoutStep> {
+    fun build(
+        durationSec: Int,
+        zone: IntensityZone?,
+        workoutType: WorkoutType,
+        discipline: Discipline,
+        profile: UserZoneProfile = UserZoneProfile(maxHr = 180, ftpWatts = 200, cssPaceSecPer100m = 90),
+    ): List<GeneratedWorkoutStep> {
         if (workoutType == WorkoutType.STRENGTH_SESSION || workoutType == WorkoutType.REST) {
             return listOf(GeneratedWorkoutStep(stepOrder = 1, stepType = WorkoutStepType.MAIN, durationSec = durationSec, intensityZone = zone))
+        }
+
+        // The zone itself already falls back to heart rate at read-time when CSS/FTP is missing
+        // (see ZoneResolver) - this only decides whether *cue text* should stop naming a pace/power
+        // metric the profile doesn't actually have.
+        val usesHeartRateFallback = when (discipline) {
+            Discipline.SWIM -> profile.cssPaceSecPer100m == null
+            Discipline.BIKE, Discipline.BRICK_BIKE -> profile.ftpWatts == null
+            else -> false
         }
 
         val warmupSec = (durationSec * WARMUP_FRACTION).roundToInt()
@@ -51,7 +67,7 @@ object WorkoutStepBuilder {
 
         val pattern = INTERVAL_PATTERNS[workoutType]
         val mainSteps = if (pattern != null) {
-            buildIntervalSteps(mainSec, pattern, zone, easyZone, discipline, workoutType)
+            buildIntervalSteps(mainSec, pattern, zone, easyZone, discipline, workoutType, usesHeartRateFallback)
         } else {
             listOf(
                 GeneratedWorkoutStep(
@@ -59,7 +75,7 @@ object WorkoutStepBuilder {
                     stepType = WorkoutStepType.MAIN,
                     durationSec = mainSec,
                     intensityZone = zone,
-                    cueText = cueFor(discipline, WorkoutStepType.MAIN, workoutType),
+                    cueText = cueFor(discipline, WorkoutStepType.MAIN, workoutType, usesHeartRateFallback),
                 ),
             )
         }
@@ -71,11 +87,11 @@ object WorkoutStepBuilder {
         val leftoverSec = (mainSec - usedMainSec).coerceAtLeast(0)
 
         val steps = mutableListOf(
-            GeneratedWorkoutStep(0, WorkoutStepType.WARMUP, warmupSec, intensityZone = easyZone, cueText = cueFor(discipline, WorkoutStepType.WARMUP, workoutType)),
+            GeneratedWorkoutStep(0, WorkoutStepType.WARMUP, warmupSec, intensityZone = easyZone, cueText = cueFor(discipline, WorkoutStepType.WARMUP, workoutType, usesHeartRateFallback)),
         )
         steps += drillSteps
         steps += mainSteps
-        steps += GeneratedWorkoutStep(0, WorkoutStepType.COOLDOWN, cooldownSec + leftoverSec, intensityZone = easyZone, cueText = cueFor(discipline, WorkoutStepType.COOLDOWN, workoutType))
+        steps += GeneratedWorkoutStep(0, WorkoutStepType.COOLDOWN, cooldownSec + leftoverSec, intensityZone = easyZone, cueText = cueFor(discipline, WorkoutStepType.COOLDOWN, workoutType, usesHeartRateFallback))
         return steps.mapIndexed { i, step -> step.copy(stepOrder = i + 1) }
     }
 
@@ -109,6 +125,7 @@ object WorkoutStepBuilder {
         recoveryZone: IntensityZone,
         discipline: Discipline,
         workoutType: WorkoutType,
+        usesHeartRateFallback: Boolean,
     ): List<GeneratedWorkoutStep> {
         val reps = mainSec / (pattern.workSec + pattern.recoverySec)
 
@@ -121,7 +138,7 @@ object WorkoutStepBuilder {
                     stepType = WorkoutStepType.MAIN,
                     durationSec = mainSec,
                     intensityZone = workZone,
-                    cueText = cueFor(discipline, WorkoutStepType.MAIN, workoutType),
+                    cueText = cueFor(discipline, WorkoutStepType.MAIN, workoutType, usesHeartRateFallback),
                 ),
             )
         }
@@ -133,7 +150,7 @@ object WorkoutStepBuilder {
                 durationSec = pattern.workSec,
                 intensityZone = workZone,
                 repeatCount = reps,
-                cueText = cueFor(discipline, WorkoutStepType.INTERVAL, workoutType),
+                cueText = cueFor(discipline, WorkoutStepType.INTERVAL, workoutType, usesHeartRateFallback),
             ),
             GeneratedWorkoutStep(
                 stepOrder = 0,
@@ -141,15 +158,17 @@ object WorkoutStepBuilder {
                 durationSec = pattern.recoverySec,
                 intensityZone = recoveryZone,
                 repeatCount = reps,
-                cueText = cueFor(discipline, WorkoutStepType.RECOVERY, workoutType),
+                cueText = cueFor(discipline, WorkoutStepType.RECOVERY, workoutType, usesHeartRateFallback),
             ),
         )
     }
 
     /** Short, discipline/step-aware coaching cues. [Discipline.BRICK_RUN] always gets the same
      * run-off-the-bike cue regardless of step type - the point of that leg is the transition, not
-     * the specific interval structure. */
-    private fun cueFor(discipline: Discipline, stepType: WorkoutStepType, workoutType: WorkoutType): String? {
+     * the specific interval structure. [usesHeartRateFallback] is true when the profile lacks the
+     * discipline's own metric (CSS for swim, FTP for bike) - only the swim threshold cue currently
+     * names a metric directly, so that's the only branch it changes. */
+    private fun cueFor(discipline: Discipline, stepType: WorkoutStepType, workoutType: WorkoutType, usesHeartRateFallback: Boolean): String? {
         if (discipline == Discipline.BRICK_RUN) {
             return "Quick, light turnover - let your legs adapt to running off the bike."
         }
@@ -161,7 +180,7 @@ object WorkoutStepBuilder {
                 else -> null
             }
             WorkoutStepType.DRILL -> null // set explicitly per-drill in buildSwimDrillSteps
-            WorkoutStepType.INTERVAL -> cueForIntervalWork(discipline, workoutType)
+            WorkoutStepType.INTERVAL -> cueForIntervalWork(discipline, workoutType, usesHeartRateFallback)
             WorkoutStepType.RECOVERY -> "Easy effort - let your heart rate come down before the next rep."
             WorkoutStepType.COOLDOWN -> "Easy effort, gradually reduce to a full stop."
             WorkoutStepType.MAIN -> when (workoutType) {
@@ -173,7 +192,7 @@ object WorkoutStepBuilder {
                 WorkoutType.CSS_TEST -> "Best sustainable effort for the full distance - stay smooth, don't sprint the start."
                 // Session was too short to fit even one full interval rep (see buildIntervalSteps'
                 // fallback) - still the same target effort, just continuous instead of broken into reps.
-                WorkoutType.THRESHOLD, WorkoutType.VO2MAX, WorkoutType.TEMPO -> cueForIntervalWork(discipline, workoutType)
+                WorkoutType.THRESHOLD, WorkoutType.VO2MAX, WorkoutType.TEMPO -> cueForIntervalWork(discipline, workoutType, usesHeartRateFallback)
                 else -> null
             }
         }
@@ -193,14 +212,18 @@ object WorkoutStepBuilder {
         else -> "Steady aerobic effort - keep it comfortable for the full distance."
     }
 
-    private fun cueForIntervalWork(discipline: Discipline, workoutType: WorkoutType): String? = when (workoutType) {
+    private fun cueForIntervalWork(discipline: Discipline, workoutType: WorkoutType, usesHeartRateFallback: Boolean): String? = when (workoutType) {
         WorkoutType.VO2MAX -> when (discipline) {
             Discipline.BIKE, Discipline.BRICK_BIKE -> "Hold 90+ RPM, stay seated and controlled."
             Discipline.RUN -> "Hard but controlled - focus on quick, light turnover."
             else -> "Hard, controlled effort."
         }
         WorkoutType.THRESHOLD -> when (discipline) {
-            Discipline.SWIM -> "Hold your CSS pace, focus on a strong, high-elbow catch."
+            Discipline.SWIM -> if (usesHeartRateFallback) {
+                "Hold a hard, sustainable heart-rate effort - focus on a strong, high-elbow catch."
+            } else {
+                "Hold your CSS pace, focus on a strong, high-elbow catch."
+            }
             Discipline.BIKE, Discipline.BRICK_BIKE -> "Steady, sustainable hard effort - like a 40-60min race pace."
             Discipline.RUN -> "Comfortably hard - you could speak in short sentences, not full ones."
             else -> null

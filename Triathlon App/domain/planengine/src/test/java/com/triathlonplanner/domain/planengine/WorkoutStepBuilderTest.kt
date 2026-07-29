@@ -3,6 +3,7 @@ package com.triathlonplanner.domain.planengine
 import com.google.common.truth.Truth.assertThat
 import com.triathlonplanner.core.model.Discipline
 import com.triathlonplanner.core.model.IntensityZone
+import com.triathlonplanner.core.model.UserZoneProfile
 import com.triathlonplanner.core.model.WorkoutStepType
 import com.triathlonplanner.core.model.WorkoutType
 import org.junit.Test
@@ -136,5 +137,41 @@ class WorkoutStepBuilderTest {
 
         assertThat(steps.all { it.cueText != null }).isTrue()
         assertThat(steps.map { it.cueText }.distinct()).hasSize(1)
+    }
+
+    @Test
+    fun `swim threshold cue names CSS pace only when the profile actually has one`() {
+        val withCss = UserZoneProfile(maxHr = 185, cssPaceSecPer100m = 90)
+        val withoutCss = UserZoneProfile(maxHr = 185)
+
+        val stepsWithCss = WorkoutStepBuilder.build(
+            durationSec = 40 * 60, zone = IntensityZone(4), workoutType = WorkoutType.THRESHOLD, discipline = Discipline.SWIM, profile = withCss,
+        )
+        val stepsWithoutCss = WorkoutStepBuilder.build(
+            durationSec = 40 * 60, zone = IntensityZone(4), workoutType = WorkoutType.THRESHOLD, discipline = Discipline.SWIM, profile = withoutCss,
+        )
+
+        val cueWithCss = stepsWithCss.single { it.stepType == WorkoutStepType.INTERVAL }.cueText
+        val cueWithoutCss = stepsWithoutCss.single { it.stepType == WorkoutStepType.INTERVAL }.cueText
+        assertThat(cueWithCss).contains("CSS")
+        assertThat(cueWithoutCss).doesNotContain("CSS")
+        assertThat(cueWithoutCss).contains("heart-rate")
+    }
+
+    @Test
+    fun `bike threshold cue is unaffected by a missing FTP - it never named power to begin with`() {
+        val withFtp = UserZoneProfile(maxHr = 185, ftpWatts = 220)
+        val withoutFtp = UserZoneProfile(maxHr = 185)
+
+        val stepsWithFtp = WorkoutStepBuilder.build(
+            durationSec = 40 * 60, zone = IntensityZone(4), workoutType = WorkoutType.THRESHOLD, discipline = Discipline.BIKE, profile = withFtp,
+        )
+        val stepsWithoutFtp = WorkoutStepBuilder.build(
+            durationSec = 40 * 60, zone = IntensityZone(4), workoutType = WorkoutType.THRESHOLD, discipline = Discipline.BIKE, profile = withoutFtp,
+        )
+
+        val cueWithFtp = stepsWithFtp.single { it.stepType == WorkoutStepType.INTERVAL }.cueText
+        val cueWithoutFtp = stepsWithoutFtp.single { it.stepType == WorkoutStepType.INTERVAL }.cueText
+        assertThat(cueWithFtp).isEqualTo(cueWithoutFtp)
     }
 }

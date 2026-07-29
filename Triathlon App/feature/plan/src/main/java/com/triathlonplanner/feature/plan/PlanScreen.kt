@@ -80,7 +80,7 @@ fun PlanScreen(viewModel: PlanViewModel = hiltViewModel()) {
                         onDayClick = viewModel::selectDate,
                     )
                     Spacer(Modifier.height(8.dp))
-                    SelectedDayPanel(state.selectedDate, state.selectedDay, state.dayInfo[state.selectedDate] != null)
+                    SelectedDayPanel(state.selectedDay, state.dayInfo[state.selectedDate] != null)
                 }
             }
         }
@@ -184,14 +184,16 @@ private fun phaseColor(phase: TrainingPhase): Color = when (phase) {
 }
 
 @Composable
-private fun SelectedDayPanel(date: LocalDate, day: DayPlanView?, isWithinPlan: Boolean) {
+private fun SelectedDayPanel(day: DayPlanView?, isWithinPlan: Boolean) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text("$date", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(4.dp))
         when {
             day != null -> {
                 Text(day.title, style = MaterialTheme.typography.titleMedium)
-                Text("${day.totalDurationMin} min - load ${day.totalLoad}", style = MaterialTheme.typography.bodySmall)
+                // The per-leg detail below already shows its own duration - only show this
+                // aggregate line when there's more than one leg (brick day) where it's not a dup.
+                if (day.legs.size > 1) {
+                    Text("${day.totalDurationMin} min - load ${day.totalLoad}", style = MaterialTheme.typography.bodySmall)
+                }
                 Spacer(Modifier.height(12.dp))
                 day.legs.forEachIndexed { index, leg ->
                     LegDetail(leg, showHeading = day.legs.size > 1)

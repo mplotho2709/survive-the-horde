@@ -4,11 +4,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Circle
@@ -45,6 +49,17 @@ fun TodayScreen(onWorkoutClick: (Long) -> Unit, viewModel: TodayViewModel = hilt
                     "No workout scheduled today - enjoy the rest.",
                     modifier = Modifier.padding(24.dp),
                 )
+                // Exactly one workout today - show its full breakdown directly, no extra tap needed.
+                state.workouts.size == 1 -> Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    PlannedCard(state.workouts.single(), state.singleWorkoutSteps)
+                    Spacer(Modifier.height(12.dp))
+                    ActualCard(state.workouts.single().status, state.singleWorkoutActual)
+                }
                 else -> LazyColumn(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                     items(state.workouts, key = { it.id }) { workout ->
                         WorkoutCard(workout, onClick = { onWorkoutClick(workout.id) })

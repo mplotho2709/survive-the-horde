@@ -68,7 +68,7 @@ fun TodayWorkoutDetailScreen(onBack: () -> Unit, viewModel: TodayWorkoutDetailVi
 }
 
 @Composable
-private fun PlannedCard(planned: TodayWorkoutView, steps: List<StepView>) {
+internal fun PlannedCard(planned: TodayWorkoutView, steps: List<StepView>) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("Planned", style = MaterialTheme.typography.titleMedium)
@@ -87,7 +87,7 @@ private fun PlannedCard(planned: TodayWorkoutView, steps: List<StepView>) {
 }
 
 @Composable
-private fun StepRow(step: StepView) {
+internal fun StepRow(step: StepView) {
     Column(modifier = Modifier.padding(vertical = 4.dp)) {
         val label = when (step.stepType) {
             WorkoutStepType.WARMUP -> "Warmup"
@@ -104,7 +104,7 @@ private fun StepRow(step: StepView) {
 }
 
 @Composable
-private fun ActualCard(plannedStatus: WorkoutStatus, actual: ActualWorkoutView?) {
+internal fun ActualCard(plannedStatus: WorkoutStatus, actual: ActualWorkoutView?) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("What you actually did", style = MaterialTheme.typography.titleMedium)

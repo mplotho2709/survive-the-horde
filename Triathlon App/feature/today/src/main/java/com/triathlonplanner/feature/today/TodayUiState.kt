@@ -17,5 +17,9 @@ data class TodayWorkoutView(
 
 data class TodayUiState(
     val workouts: List<TodayWorkoutView> = emptyList(),
+    // Populated only when there's exactly one workout today, so Today can show the full
+    // planned/actual breakdown directly instead of requiring a tap into a separate detail screen.
+    val singleWorkoutSteps: List<StepView> = emptyList(),
+    val singleWorkoutActual: ActualWorkoutView? = null,
     val isLoading: Boolean = true,
 )

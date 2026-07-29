@@ -32,6 +32,13 @@ class OnboardingViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(OnboardingUiState())
     val uiState: StateFlow<OnboardingUiState> = _uiState.asStateFlow()
 
+    init {
+        viewModelScope.launch {
+            val hasProfile = profileRepository.getProfileOnce() != null
+            _uiState.update { it.copy(hasExistingProfile = hasProfile) }
+        }
+    }
+
     fun refreshHealthConnectStatus() {
         viewModelScope.launch {
             val granted = healthConnectDataSource.hasAllPermissions()
@@ -70,11 +77,17 @@ class OnboardingViewModel @Inject constructor(
     fun goToStep(step: OnboardingStep) = _uiState.update { it.copy(step = step) }
 
     fun advance() {
-        val current = _uiState.value.step
-        val next = when (current) {
+        val state = _uiState.value
+        val next = when (state.step) {
             OnboardingStep.DISTANCE -> OnboardingStep.RACE_DATE
             OnboardingStep.RACE_DATE -> OnboardingStep.TRAINING_AVAILABILITY
-            OnboardingStep.TRAINING_AVAILABILITY -> OnboardingStep.MAX_HR
+            OnboardingStep.TRAINING_AVAILABILITY -> {
+                if (state.hasExistingProfile) {
+                    finish()
+                    return
+                }
+                OnboardingStep.MAX_HR
+            }
             OnboardingStep.MAX_HR -> OnboardingStep.FTP_CSS
             OnboardingStep.FTP_CSS -> OnboardingStep.HEALTH_CONNECT
             OnboardingStep.HEALTH_CONNECT -> {
@@ -102,29 +115,37 @@ class OnboardingViewModel @Inject constructor(
         val state = _uiState.value
         val distance = state.selectedDistance ?: return
         val raceDate = state.raceDate ?: return
-        val maxHr = state.maxHrInput.toIntOrNull() ?: return
+        // When re-onboarding with an existing profile, HR/FTP/CSS were never collected this run -
+        // the maxHr guard below only applies to the fresh-profile path.
+        if (!state.hasExistingProfile && state.maxHrInput.toIntOrNull() == null) return
 
         _uiState.update { it.copy(isSaving = true, errorMessage = null) }
         viewModelScope.launch {
             try {
-                val ftpWatts = state.ftpInput.toIntOrNull()
-                val cssMin = state.cssMinutesInput.toIntOrNull()
-                val cssSec = state.cssSecondsInput.toIntOrNull()
-                val cssPaceSecPer100m = if (cssMin != null && cssSec != null) cssMin * 60 + cssSec else null
+                val profile = if (state.hasExistingProfile) {
+                    profileRepository.getProfileOnce() ?: return@launch
+                } else {
+                    val maxHr = state.maxHrInput.toIntOrNull() ?: return@launch
+                    val ftpWatts = state.ftpInput.toIntOrNull()
+                    val cssMin = state.cssMinutesInput.toIntOrNull()
+                    val cssSec = state.cssSecondsInput.toIntOrNull()
+                    val cssPaceSecPer100m = if (cssMin != null && cssSec != null) cssMin * 60 + cssSec else null
 
-                val profile = UserZoneProfile(
-                    maxHr = maxHr,
-                    restingHr = state.restingHrInput.toIntOrNull(),
-                    ftpWatts = ftpWatts,
-                    ftpSource = if (ftpWatts != null) FtpSource.MANUAL else null,
-                    cssPaceSecPer100m = cssPaceSecPer100m,
-                    cssSource = if (cssPaceSecPer100m != null) CssSource.MANUAL else null,
-                )
+                    val newProfile = UserZoneProfile(
+                        maxHr = maxHr,
+                        restingHr = state.restingHrInput.toIntOrNull(),
+                        ftpWatts = ftpWatts,
+                        ftpSource = if (ftpWatts != null) FtpSource.MANUAL else null,
+                        cssPaceSecPer100m = cssPaceSecPer100m,
+                        cssSource = if (cssPaceSecPer100m != null) CssSource.MANUAL else null,
+                    )
+                    profileRepository.saveProfile(newProfile)
+                    newProfile
+                }
                 val availability = TrainingAvailability(
                     weeklyHoursTarget = state.weeklyHoursInput.toDoubleOrNull() ?: recommendedFor(distance).weeklyHoursTarget,
                     daysPerWeekTarget = state.daysPerWeekInput.toIntOrNull() ?: recommendedFor(distance).daysPerWeekTarget,
                 )
-                profileRepository.saveProfile(profile)
                 planRepository.createPlanForGoal(
                     RaceGoal(distance, raceDate, trainingAvailability = availability),
                     profile,

@@ -27,6 +27,10 @@ data class OnboardingUiState(
     val isComplete: Boolean = false,
     val errorMessage: String? = null,
     val healthConnectPermissionsGranted: Boolean = false,
+    // True when a UserZoneProfile already exists (e.g. re-onboarding after a plan reset) - in
+    // that case max HR/FTP/CSS/Health Connect are already set up and those steps are skipped;
+    // the existing profile is reused as-is for the new plan.
+    val hasExistingProfile: Boolean = false,
 ) {
     val canProceedFromDistance: Boolean get() = selectedDistance != null
     val canProceedFromDate: Boolean get() = raceDate != null && raceDate.isAfter(LocalDate.now())

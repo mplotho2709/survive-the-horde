@@ -85,10 +85,13 @@ fun OnboardingScreen(
                     Spacer(Modifier.width(1.dp))
                 }
 
+                val isFinalStep = state.step == OnboardingStep.HEALTH_CONNECT ||
+                    (state.step == OnboardingStep.TRAINING_AVAILABILITY && state.hasExistingProfile)
+
                 val canProceed = when (state.step) {
                     OnboardingStep.DISTANCE -> state.canProceedFromDistance
                     OnboardingStep.RACE_DATE -> state.canProceedFromDate
-                    OnboardingStep.TRAINING_AVAILABILITY -> state.canProceedFromAvailability
+                    OnboardingStep.TRAINING_AVAILABILITY -> state.canProceedFromAvailability && !state.isSaving
                     OnboardingStep.MAX_HR -> state.canProceedFromMaxHr
                     OnboardingStep.FTP_CSS -> true
                     OnboardingStep.HEALTH_CONNECT -> !state.isSaving
@@ -98,7 +101,7 @@ fun OnboardingScreen(
                     if (state.isSaving) {
                         CircularProgressIndicator(modifier = Modifier.height(20.dp).width(20.dp))
                     } else {
-                        Text(if (state.step == OnboardingStep.HEALTH_CONNECT) "Create my plan" else "Next")
+                        Text(if (isFinalStep) "Create my plan" else "Next")
                     }
                 }
             }
@@ -170,6 +173,14 @@ private fun TrainingAvailabilityStep(state: OnboardingUiState, viewModel: Onboar
         label = { Text("Days per week") },
         modifier = Modifier.fillMaxWidth(),
     )
+    if (state.hasExistingProfile) {
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "Using your existing max HR, FTP, and swim pace from your profile - update those " +
+                "anytime from the Profile tab.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
 }
 
 @Composable

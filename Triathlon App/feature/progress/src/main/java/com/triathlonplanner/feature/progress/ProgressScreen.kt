@@ -2,10 +2,13 @@ package com.triathlonplanner.feature.progress
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -14,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -90,6 +94,10 @@ private fun LegendEntry(color: Color, label: String) {
     }
 }
 
+// Below this, week labels and bar pairs start overlapping - long plans (e.g. a 28-week Full Iron
+// build) scroll horizontally instead of squeezing every week into the screen width.
+private val MIN_WEEK_WIDTH = 44.dp
+
 @Composable
 private fun WeeklyLoadChart(points: List<WeeklyLoadPoint>, modifier: Modifier = Modifier) {
     if (points.isEmpty()) {
@@ -103,37 +111,47 @@ private fun WeeklyLoadChart(points: List<WeeklyLoadPoint>, modifier: Modifier = 
     val textMeasurer = rememberTextMeasurer()
     val axisLabelSizePx = with(androidx.compose.ui.platform.LocalDensity.current) { 11.sp.toPx() }
 
-    Canvas(modifier = modifier) {
-        val axisLabelHeight = axisLabelSizePx * 1.6f
-        val barAreaHeight = size.height - axisLabelHeight
-        val barGroupWidth = size.width / points.size
-        val barWidth = barGroupWidth * 0.35f
+    BoxWithConstraints(modifier = modifier) {
+        // Fills the available width when everything fits comfortably (short plans, unchanged
+        // behavior); once weeks would drop below MIN_WEEK_WIDTH, the chart grows wider than the
+        // screen and this Box's horizontalScroll takes over instead of cramming bars together.
+        val weekWidth = (maxWidth / points.size).coerceAtLeast(MIN_WEEK_WIDTH)
+        val chartWidth = weekWidth * points.size
 
-        points.forEachIndexed { index, point ->
-            val groupStart = index * barGroupWidth
-            val plannedHeight = barAreaHeight * (point.plannedLoad.toFloat() / maxLoad)
-            val completedHeight = barAreaHeight * (point.completedLoad.toFloat() / maxLoad)
+        Box(modifier = Modifier.fillMaxHeight().horizontalScroll(rememberScrollState())) {
+            Canvas(modifier = Modifier.width(chartWidth).fillMaxHeight()) {
+                val axisLabelHeight = axisLabelSizePx * 1.6f
+                val barAreaHeight = size.height - axisLabelHeight
+                val barGroupWidth = size.width / points.size
+                val barWidth = barGroupWidth * 0.35f
 
-            drawRect(
-                color = plannedColor,
-                topLeft = Offset(groupStart + barGroupWidth * 0.1f, barAreaHeight - plannedHeight),
-                size = Size(barWidth, plannedHeight),
-            )
-            drawRect(
-                color = completedColor,
-                topLeft = Offset(groupStart + barGroupWidth * 0.55f, barAreaHeight - completedHeight),
-                size = Size(barWidth, completedHeight),
-            )
+                points.forEachIndexed { index, point ->
+                    val groupStart = index * barGroupWidth
+                    val plannedHeight = barAreaHeight * (point.plannedLoad.toFloat() / maxLoad)
+                    val completedHeight = barAreaHeight * (point.completedLoad.toFloat() / maxLoad)
 
-            val label = "W${point.weekIndex}"
-            val measured = textMeasurer.measure(
-                label,
-                style = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = labelColor),
-            )
-            drawText(
-                measured,
-                topLeft = Offset(groupStart + barGroupWidth / 2 - measured.size.width / 2, barAreaHeight + axisLabelHeight * 0.2f),
-            )
+                    drawRect(
+                        color = plannedColor,
+                        topLeft = Offset(groupStart + barGroupWidth * 0.1f, barAreaHeight - plannedHeight),
+                        size = Size(barWidth, plannedHeight),
+                    )
+                    drawRect(
+                        color = completedColor,
+                        topLeft = Offset(groupStart + barGroupWidth * 0.55f, barAreaHeight - completedHeight),
+                        size = Size(barWidth, completedHeight),
+                    )
+
+                    val label = "W${point.weekIndex}"
+                    val measured = textMeasurer.measure(
+                        label,
+                        style = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = labelColor),
+                    )
+                    drawText(
+                        measured,
+                        topLeft = Offset(groupStart + barGroupWidth / 2 - measured.size.width / 2, barAreaHeight + axisLabelHeight * 0.2f),
+                    )
+                }
+            }
         }
     }
 }

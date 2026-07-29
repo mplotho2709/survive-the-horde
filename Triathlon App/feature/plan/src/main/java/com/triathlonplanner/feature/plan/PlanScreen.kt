@@ -21,7 +21,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -29,7 +28,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -56,7 +54,7 @@ fun PlanScreen(onWorkoutClick: (Long) -> Unit, viewModel: PlanViewModel = hiltVi
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val today = LocalDate.now()
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Plan") }) }) { padding ->
+    Scaffold { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when {
                 state.isLoading -> CircularProgressIndicator(Modifier.padding(24.dp))
@@ -64,11 +62,10 @@ fun PlanScreen(onWorkoutClick: (Long) -> Unit, viewModel: PlanViewModel = hiltVi
                 else -> Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp)
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
                         .verticalScroll(rememberScrollState()),
                 ) {
                     MonthHeader(state.visibleMonth, onPrev = viewModel::goToPreviousMonth, onNext = viewModel::goToNextMonth)
-                    Spacer(Modifier.height(8.dp))
                     WeekdayHeaderRow()
                     CalendarGrid(
                         month = state.visibleMonth,
@@ -77,7 +74,7 @@ fun PlanScreen(onWorkoutClick: (Long) -> Unit, viewModel: PlanViewModel = hiltVi
                         dayInfo = state.dayInfo,
                         onDayClick = viewModel::selectDate,
                     )
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(8.dp))
                     SelectedDayPanel(state.selectedDate, state.selectedDay, state.dayInfo[state.selectedDate] != null, onWorkoutClick)
                 }
             }
@@ -183,20 +180,18 @@ private fun phaseColor(phase: TrainingPhase): Color = when (phase) {
 
 @Composable
 private fun SelectedDayPanel(date: LocalDate, day: DayPlanView?, isWithinPlan: Boolean, onWorkoutClick: (Long) -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("$date", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(4.dp))
-            when {
-                day != null -> {
-                    Text(day.title, style = MaterialTheme.typography.titleMedium)
-                    Text("${day.totalDurationMin} min - load ${day.totalLoad}", style = MaterialTheme.typography.bodySmall)
-                    Spacer(Modifier.height(8.dp))
-                    day.legs.forEach { leg -> DayLegRow(leg, onClick = { onWorkoutClick(leg.workoutId) }) }
-                }
-                isWithinPlan -> Text("Rest Day", style = MaterialTheme.typography.titleMedium)
-                else -> Text("No plan for this day.", style = MaterialTheme.typography.titleMedium)
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text("$date", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(4.dp))
+        when {
+            day != null -> {
+                Text(day.title, style = MaterialTheme.typography.titleMedium)
+                Text("${day.totalDurationMin} min - load ${day.totalLoad}", style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(8.dp))
+                day.legs.forEach { leg -> DayLegRow(leg, onClick = { onWorkoutClick(leg.workoutId) }) }
             }
+            isWithinPlan -> Text("Rest Day", style = MaterialTheme.typography.titleMedium)
+            else -> Text("No plan for this day.", style = MaterialTheme.typography.titleMedium)
         }
     }
 }

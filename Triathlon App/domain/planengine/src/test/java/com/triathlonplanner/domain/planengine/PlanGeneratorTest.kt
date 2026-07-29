@@ -72,6 +72,20 @@ class PlanGeneratorTest {
     }
 
     @Test
+    fun `aggressive target time relative to current fitness produces a realism warning`() {
+        val startDate = LocalDate.of(2026, 1, 5)
+        val raceGoal = RaceGoal(
+            distance = Distance.OLYMPIC,
+            raceDate = startDate.plusWeeks(16),
+            currentFitnessEstimateSec = 10_000,
+            targetFinishTimeSec = 8_000, // 20% faster - well past the always-warn threshold
+        )
+        val plan = PlanGenerator.generate(raceGoal, profile, startDate)
+
+        assertThat(plan.warnings.any { it.contains("aggressive") }).isTrue()
+    }
+
+    @Test
     fun `very close race date still produces a valid minimal plan`() {
         val startDate = LocalDate.of(2026, 1, 5)
         val plan = PlanGenerator.generate(

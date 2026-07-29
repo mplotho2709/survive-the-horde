@@ -15,7 +15,7 @@ import androidx.room.RoomDatabase
         AdaptationEventEntity::class,
         RollingLoadStateEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {

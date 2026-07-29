@@ -14,4 +14,5 @@ data class RaceGoalEntity(
     val createdAtEpochMilli: Long,
     val targetWeeklyHours: Double? = null,
     val targetDaysPerWeek: Int? = null,
+    val currentFitnessEstimateSec: Int? = null,
 )

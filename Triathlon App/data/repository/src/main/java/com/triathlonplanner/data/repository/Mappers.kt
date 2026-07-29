@@ -67,6 +67,7 @@ fun RaceGoalEntity.toDomain(): RaceGoal = RaceGoal(
         val days = targetDaysPerWeek
         if (hours != null && days != null) TrainingAvailability(weeklyHoursTarget = hours, daysPerWeekTarget = days) else null
     },
+    currentFitnessEstimateSec = currentFitnessEstimateSec,
 )
 
 fun RaceGoal.toEntity(isActive: Boolean, createdAt: Instant): RaceGoalEntity = RaceGoalEntity(
@@ -78,6 +79,7 @@ fun RaceGoal.toEntity(isActive: Boolean, createdAt: Instant): RaceGoalEntity = R
     createdAtEpochMilli = createdAt.toEpochMilli(),
     targetWeeklyHours = trainingAvailability?.weeklyHoursTarget,
     targetDaysPerWeek = trainingAvailability?.daysPerWeekTarget,
+    currentFitnessEstimateSec = currentFitnessEstimateSec,
 )
 
 fun PlannedWorkoutWithWeekIndex.toDomainSnapshot(): PlannedWorkoutSnapshot = PlannedWorkoutSnapshot(

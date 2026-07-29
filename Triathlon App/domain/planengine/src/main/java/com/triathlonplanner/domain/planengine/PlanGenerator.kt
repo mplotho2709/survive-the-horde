@@ -41,6 +41,12 @@ object PlanGenerator {
 
         val periodization = PeriodizationCalculator.calculate(raceGoal.distance, totalWeeks)
         warnings += periodization.warnings
+        TargetRealismCalculator.checkRealism(
+            raceGoal.distance,
+            totalWeeks,
+            raceGoal.currentFitnessEstimateSec,
+            raceGoal.targetFinishTimeSec,
+        )?.let { warnings += it }
         val weeklyLoads = WeeklyLoadCurve.calculate(periodization.weeks)
 
         val generatedWeeks = periodization.weeks.mapIndexed { idx, weekPlan ->

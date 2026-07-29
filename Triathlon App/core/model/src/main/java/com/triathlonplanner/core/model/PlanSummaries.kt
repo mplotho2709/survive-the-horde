@@ -25,3 +25,10 @@ data class WeeklyLoadPoint(
     val plannedLoad: Int,
     val completedLoad: Int,
 )
+
+/** Result of creating a plan - carries [GeneratedPlan.warnings] out to the caller instead of
+ * discarding them, so things like "your target is aggressive for this timeline" are actually seen. */
+data class PlanCreationResult(
+    val planId: Long,
+    val warnings: List<String>,
+)

@@ -12,6 +12,7 @@ import com.triathlonplanner.data.healthconnect.HealthConnectDataSource
 import com.triathlonplanner.data.repository.ActivitySyncRepository
 import com.triathlonplanner.data.repository.PlanRepository
 import com.triathlonplanner.data.repository.ProfileRepository
+import com.triathlonplanner.domain.zones.RaceTimePredictor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,8 +35,13 @@ class OnboardingViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            val hasProfile = profileRepository.getProfileOnce() != null
-            _uiState.update { it.copy(hasExistingProfile = hasProfile) }
+            val profile = profileRepository.getProfileOnce()
+            _uiState.update {
+                it.copy(
+                    hasExistingProfile = profile != null,
+                    existingCssPaceSecPer100m = profile?.cssPaceSecPer100m,
+                )
+            }
         }
     }
 
@@ -74,41 +80,128 @@ class OnboardingViewModel @Inject constructor(
     fun updateCssMinutes(value: String) = _uiState.update { it.copy(cssMinutesInput = value.filter(Char::isDigit)) }
     fun updateCssSeconds(value: String) = _uiState.update { it.copy(cssSecondsInput = value.filter(Char::isDigit)) }
 
+    fun selectGoalType(goalType: GoalType) = _uiState.update { it.copy(goalType = goalType) }
+    fun updateTargetTimeHours(value: String) = _uiState.update { it.copy(targetTimeHoursInput = value.filter(Char::isDigit)) }
+    fun updateTargetTimeMinutes(value: String) = _uiState.update { it.copy(targetTimeMinutesInput = value.filter(Char::isDigit)) }
+    fun updateTargetTimeSeconds(value: String) = _uiState.update { it.copy(targetTimeSecondsInput = value.filter(Char::isDigit)) }
+
+    fun selectFitnessEstimateMode(mode: FitnessEstimateMode) = _uiState.update { it.copy(fitnessEstimateMode = mode) }
+    fun updateCurrentEstimateHours(value: String) = _uiState.update { it.copy(currentEstimateHoursInput = value.filter(Char::isDigit)) }
+    fun updateCurrentEstimateMinutes(value: String) = _uiState.update { it.copy(currentEstimateMinutesInput = value.filter(Char::isDigit)) }
+    fun updateCurrentEstimateSeconds(value: String) = _uiState.update { it.copy(currentEstimateSecondsInput = value.filter(Char::isDigit)) }
+    fun updateRunPbDistance(meters: Double) = _uiState.update { it.copy(runPbDistanceM = meters) }
+    fun updateRunPbMinutes(value: String) = _uiState.update { it.copy(runPbMinutesInput = value.filter(Char::isDigit)) }
+    fun updateRunPbSeconds(value: String) = _uiState.update { it.copy(runPbSecondsInput = value.filter(Char::isDigit)) }
+
+    fun skipCurrentFitness() {
+        _uiState.update { it.copy(resolvedCurrentEstimateSec = null) }
+        applyAvailabilityDefaults()
+        _uiState.update { it.copy(step = OnboardingStep.TRAINING_AVAILABILITY) }
+    }
+
     fun goToStep(step: OnboardingStep) = _uiState.update { it.copy(step = step) }
 
     fun advance() {
         val state = _uiState.value
         val next = when (state.step) {
             OnboardingStep.DISTANCE -> OnboardingStep.RACE_DATE
-            OnboardingStep.RACE_DATE -> OnboardingStep.TRAINING_AVAILABILITY
+            OnboardingStep.RACE_DATE -> if (state.hasExistingProfile) OnboardingStep.GOAL_TYPE else OnboardingStep.MAX_HR
+            OnboardingStep.MAX_HR -> OnboardingStep.FTP_CSS
+            OnboardingStep.FTP_CSS -> OnboardingStep.GOAL_TYPE
+            OnboardingStep.GOAL_TYPE -> {
+                if (state.goalType == GoalType.JUST_FINISH) {
+                    applyAvailabilityDefaults()
+                    OnboardingStep.TRAINING_AVAILABILITY
+                } else {
+                    OnboardingStep.CURRENT_FITNESS
+                }
+            }
+            OnboardingStep.CURRENT_FITNESS -> {
+                resolveCurrentFitnessEstimate()
+                applyAvailabilityDefaults()
+                OnboardingStep.TRAINING_AVAILABILITY
+            }
             OnboardingStep.TRAINING_AVAILABILITY -> {
                 if (state.hasExistingProfile) {
                     finish()
                     return
                 }
-                OnboardingStep.MAX_HR
+                OnboardingStep.HEALTH_CONNECT
             }
-            OnboardingStep.MAX_HR -> OnboardingStep.FTP_CSS
-            OnboardingStep.FTP_CSS -> OnboardingStep.HEALTH_CONNECT
             OnboardingStep.HEALTH_CONNECT -> {
                 finish()
                 return
             }
+            OnboardingStep.PLAN_READY -> return
         }
         _uiState.update { it.copy(step = next) }
     }
 
     fun back() {
-        val current = _uiState.value.step
-        val previous = when (current) {
+        val state = _uiState.value
+        val previous = when (state.step) {
             OnboardingStep.DISTANCE -> return
             OnboardingStep.RACE_DATE -> OnboardingStep.DISTANCE
-            OnboardingStep.TRAINING_AVAILABILITY -> OnboardingStep.RACE_DATE
-            OnboardingStep.MAX_HR -> OnboardingStep.TRAINING_AVAILABILITY
+            OnboardingStep.MAX_HR -> OnboardingStep.RACE_DATE
             OnboardingStep.FTP_CSS -> OnboardingStep.MAX_HR
-            OnboardingStep.HEALTH_CONNECT -> OnboardingStep.FTP_CSS
+            OnboardingStep.GOAL_TYPE -> if (state.hasExistingProfile) OnboardingStep.RACE_DATE else OnboardingStep.FTP_CSS
+            OnboardingStep.CURRENT_FITNESS -> OnboardingStep.GOAL_TYPE
+            OnboardingStep.TRAINING_AVAILABILITY -> if (state.goalType == GoalType.JUST_FINISH) OnboardingStep.GOAL_TYPE else OnboardingStep.CURRENT_FITNESS
+            OnboardingStep.HEALTH_CONNECT -> OnboardingStep.TRAINING_AVAILABILITY
+            OnboardingStep.PLAN_READY -> return
         }
         _uiState.update { it.copy(step = previous) }
+    }
+
+    private fun resolveCurrentFitnessEstimate() {
+        val state = _uiState.value
+        val distance = state.selectedDistance ?: return
+        val estimate = when (state.fitnessEstimateMode) {
+            FitnessEstimateMode.DIRECT_ENTRY -> hmsToSecondsOrNull(
+                state.currentEstimateHoursInput,
+                state.currentEstimateMinutesInput,
+                state.currentEstimateSecondsInput,
+            )
+            FitnessEstimateMode.CALCULATED -> {
+                val css = state.effectiveCssPaceSecPer100m
+                val runPbDistanceM = state.runPbDistanceM
+                val runPbTimeSec = msToSecondsOrNull(state.runPbMinutesInput, state.runPbSecondsInput)
+                if (css != null && runPbDistanceM != null && runPbTimeSec != null) {
+                    RaceTimePredictor.estimateCurrentFinishTimeSec(distance, css, runPbDistanceM, runPbTimeSec)
+                } else {
+                    null
+                }
+            }
+            null -> null
+        }
+        _uiState.update { it.copy(resolvedCurrentEstimateSec = estimate) }
+    }
+
+    /** Recomputes the recommended weekly-hours/days-per-week defaults for TRAINING_AVAILABILITY -
+     * plain per-distance recommendation for "just finish", bumped by the fitness gap when a target
+     * time and a resolved current-fitness estimate are both known. */
+    private fun applyAvailabilityDefaults() {
+        val state = _uiState.value
+        val distance = state.selectedDistance ?: return
+        val targetTimeSec = if (state.goalType == GoalType.TARGET_TIME) {
+            hmsToSecondsOrNull(state.targetTimeHoursInput, state.targetTimeMinutesInput, state.targetTimeSecondsInput)
+        } else {
+            null
+        }
+        val currentEstimateSec = state.resolvedCurrentEstimateSec
+
+        val recommended = if (targetTimeSec != null && currentEstimateSec != null) {
+            val requiredImprovement = RaceTimePredictor.requiredImprovementPercent(currentEstimateSec, targetTimeSec)
+            adjustForFitnessGap(distance, requiredImprovement)
+        } else {
+            recommendedFor(distance)
+        }
+        _uiState.update {
+            it.copy(
+                weeklyHoursInput = recommended.weeklyHoursTarget.toString(),
+                daysPerWeekInput = recommended.daysPerWeekTarget.toString(),
+            )
+        }
     }
 
     private fun finish() {
@@ -146,8 +239,20 @@ class OnboardingViewModel @Inject constructor(
                     weeklyHoursTarget = state.weeklyHoursInput.toDoubleOrNull() ?: recommendedFor(distance).weeklyHoursTarget,
                     daysPerWeekTarget = state.daysPerWeekInput.toIntOrNull() ?: recommendedFor(distance).daysPerWeekTarget,
                 )
-                planRepository.createPlanForGoal(
-                    RaceGoal(distance, raceDate, trainingAvailability = availability),
+                val targetFinishTimeSec = if (state.goalType == GoalType.TARGET_TIME) {
+                    hmsToSecondsOrNull(state.targetTimeHoursInput, state.targetTimeMinutesInput, state.targetTimeSecondsInput)
+                } else {
+                    null
+                }
+
+                val result = planRepository.createPlanForGoal(
+                    RaceGoal(
+                        distance,
+                        raceDate,
+                        trainingAvailability = availability,
+                        targetFinishTimeSec = targetFinishTimeSec,
+                        currentFitnessEstimateSec = state.resolvedCurrentEstimateSec,
+                    ),
                     profile,
                     LocalDate.now(),
                 )
@@ -155,10 +260,18 @@ class OnboardingViewModel @Inject constructor(
                 // against - otherwise training done before this plan (or before Health Connect
                 // was even connected) would never be stored at all.
                 activitySyncRepository.backfillHistory()
-                _uiState.update { it.copy(isSaving = false, isComplete = true) }
+                _uiState.update {
+                    it.copy(
+                        isSaving = false,
+                        step = OnboardingStep.PLAN_READY,
+                        planWarnings = result.warnings,
+                    )
+                }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isSaving = false, errorMessage = "Couldn't create your plan: ${e.message}") }
             }
         }
     }
+
+    fun confirmPlanReady() = _uiState.update { it.copy(isComplete = true) }
 }

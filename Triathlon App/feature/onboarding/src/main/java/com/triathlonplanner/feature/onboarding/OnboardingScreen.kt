@@ -39,6 +39,13 @@ import com.triathlonplanner.data.healthconnect.healthConnectPermissionRequestCon
 import java.time.Instant
 import java.time.ZoneOffset
 
+private val RUN_PB_DISTANCE_OPTIONS = listOf(
+    "5K" to 5_000.0,
+    "10K" to 10_000.0,
+    "Half Marathon" to Distance.HALF_IRON.runMeters.toDouble(),
+    "Marathon" to Distance.FULL_IRON.runMeters.toDouble(),
+)
+
 @Composable
 fun OnboardingScreen(
     onFinished: () -> Unit,
@@ -61,14 +68,17 @@ fun OnboardingScreen(
             when (state.step) {
                 OnboardingStep.DISTANCE -> DistanceStep(state.selectedDistance, viewModel::selectDistance)
                 OnboardingStep.RACE_DATE -> RaceDateStep(viewModel::selectRaceDate)
-                OnboardingStep.TRAINING_AVAILABILITY -> TrainingAvailabilityStep(state, viewModel)
                 OnboardingStep.MAX_HR -> MaxHrStep(state, viewModel)
                 OnboardingStep.FTP_CSS -> FtpCssStep(state, viewModel)
+                OnboardingStep.GOAL_TYPE -> GoalTypeStep(state, viewModel)
+                OnboardingStep.CURRENT_FITNESS -> CurrentFitnessStep(state, viewModel)
+                OnboardingStep.TRAINING_AVAILABILITY -> TrainingAvailabilityStep(state, viewModel)
                 OnboardingStep.HEALTH_CONNECT -> HealthConnectStep(
                     granted = state.healthConnectPermissionsGranted,
                     onRefresh = viewModel::refreshHealthConnectStatus,
                     onPermissionsResult = viewModel::onHealthConnectPermissionsResult,
                 )
+                OnboardingStep.PLAN_READY -> PlanReadyStep(state.planWarnings)
             }
 
             Spacer(Modifier.height(24.dp))
@@ -79,29 +89,42 @@ fun OnboardingScreen(
             }
 
             Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                if (state.step != OnboardingStep.DISTANCE) {
+                if (state.step != OnboardingStep.DISTANCE && state.step != OnboardingStep.PLAN_READY) {
                     TextButton(onClick = viewModel::back) { Text("Back") }
                 } else {
                     Spacer(Modifier.width(1.dp))
                 }
 
-                val isFinalStep = state.step == OnboardingStep.HEALTH_CONNECT ||
-                    (state.step == OnboardingStep.TRAINING_AVAILABILITY && state.hasExistingProfile)
+                if (state.step == OnboardingStep.PLAN_READY) {
+                    Button(onClick = viewModel::confirmPlanReady) { Text("Let's go") }
+                } else {
+                    val isFinalStep = state.step == OnboardingStep.HEALTH_CONNECT ||
+                        (state.step == OnboardingStep.TRAINING_AVAILABILITY && state.hasExistingProfile)
 
-                val canProceed = when (state.step) {
-                    OnboardingStep.DISTANCE -> state.canProceedFromDistance
-                    OnboardingStep.RACE_DATE -> state.canProceedFromDate
-                    OnboardingStep.TRAINING_AVAILABILITY -> state.canProceedFromAvailability && !state.isSaving
-                    OnboardingStep.MAX_HR -> state.canProceedFromMaxHr
-                    OnboardingStep.FTP_CSS -> true
-                    OnboardingStep.HEALTH_CONNECT -> !state.isSaving
-                }
+                    val canProceed = when (state.step) {
+                        OnboardingStep.DISTANCE -> state.canProceedFromDistance
+                        OnboardingStep.RACE_DATE -> state.canProceedFromDate
+                        OnboardingStep.MAX_HR -> state.canProceedFromMaxHr
+                        OnboardingStep.FTP_CSS -> true
+                        OnboardingStep.GOAL_TYPE -> state.canProceedFromGoalType
+                        OnboardingStep.CURRENT_FITNESS -> state.canProceedFromCurrentFitness
+                        OnboardingStep.TRAINING_AVAILABILITY -> state.canProceedFromAvailability && !state.isSaving
+                        OnboardingStep.HEALTH_CONNECT -> !state.isSaving
+                        OnboardingStep.PLAN_READY -> true
+                    }
 
-                Button(onClick = viewModel::advance, enabled = canProceed) {
-                    if (state.isSaving) {
-                        CircularProgressIndicator(modifier = Modifier.height(20.dp).width(20.dp))
-                    } else {
-                        Text(if (isFinalStep) "Create my plan" else "Next")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (state.step == OnboardingStep.CURRENT_FITNESS) {
+                            TextButton(onClick = viewModel::skipCurrentFitness) { Text("Skip") }
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Button(onClick = viewModel::advance, enabled = canProceed) {
+                            if (state.isSaving) {
+                                CircularProgressIndicator(modifier = Modifier.height(20.dp).width(20.dp))
+                            } else {
+                                Text(if (isFinalStep) "Create my plan" else "Next")
+                            }
+                        }
                     }
                 }
             }
@@ -150,13 +173,12 @@ private fun RaceDateStep(onSelect: (java.time.LocalDate) -> Unit) {
 
 @Composable
 private fun TrainingAvailabilityStep(state: OnboardingUiState, viewModel: OnboardingViewModel) {
-    val recommended = state.selectedDistance?.let(::recommendedFor)
     Text("How much time can you train?", style = MaterialTheme.typography.headlineSmall)
     Spacer(Modifier.height(8.dp))
     Text(
-        recommended?.let {
-            "Recommended for ${state.selectedDistance?.displayName}: ${it.weeklyHoursTarget}h across ${it.daysPerWeekTarget} days/week."
-        } ?: "Set a weekly hours target and how many days you can train.",
+        "We've pre-filled a recommendation based on your race distance" +
+            (if (state.goalType == GoalType.TARGET_TIME) " and target time" else "") +
+            " - adjust it to fit your schedule.",
         style = MaterialTheme.typography.bodySmall,
     )
     Spacer(Modifier.height(16.dp))
@@ -239,6 +261,175 @@ private fun FtpCssStep(state: OnboardingUiState, viewModel: OnboardingViewModel)
             label = { Text("sec") },
             modifier = Modifier.width(100.dp),
         )
+    }
+}
+
+@Composable
+private fun GoalTypeStep(state: OnboardingUiState, viewModel: OnboardingViewModel) {
+    Text("What's your goal?", style = MaterialTheme.typography.headlineSmall)
+    Spacer(Modifier.height(16.dp))
+    listOf(
+        GoalType.JUST_FINISH to "Just finish",
+        GoalType.TARGET_TIME to "Hit a target time",
+    ).forEach { (goalType, label) ->
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .selectable(selected = state.goalType == goalType, onClick = { viewModel.selectGoalType(goalType) })
+                .padding(vertical = 8.dp),
+        ) {
+            RadioButton(selected = state.goalType == goalType, onClick = { viewModel.selectGoalType(goalType) })
+            Spacer(Modifier.width(8.dp))
+            Text(label, style = MaterialTheme.typography.titleMedium)
+        }
+    }
+    if (state.goalType == GoalType.TARGET_TIME) {
+        Spacer(Modifier.height(16.dp))
+        Text("Target finish time", style = MaterialTheme.typography.labelLarge)
+        Row {
+            OutlinedTextField(
+                value = state.targetTimeHoursInput,
+                onValueChange = viewModel::updateTargetTimeHours,
+                label = { Text("hr") },
+                modifier = Modifier.width(90.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            OutlinedTextField(
+                value = state.targetTimeMinutesInput,
+                onValueChange = viewModel::updateTargetTimeMinutes,
+                label = { Text("min") },
+                modifier = Modifier.width(90.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            OutlinedTextField(
+                value = state.targetTimeSecondsInput,
+                onValueChange = viewModel::updateTargetTimeSeconds,
+                label = { Text("sec") },
+                modifier = Modifier.width(90.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun CurrentFitnessStep(state: OnboardingUiState, viewModel: OnboardingViewModel) {
+    Text("Where do you stand today?", style = MaterialTheme.typography.headlineSmall)
+    Spacer(Modifier.height(8.dp))
+    Text(
+        "This helps us judge how big a jump your target is, and adjust your training volume " +
+            "accordingly. You can skip this if you'd rather not estimate.",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    Spacer(Modifier.height(16.dp))
+
+    listOf(
+        FitnessEstimateMode.DIRECT_ENTRY to "I know my estimated finish time",
+        FitnessEstimateMode.CALCULATED to "Calculate it from a recent run PB",
+    ).forEach { (mode, label) ->
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .selectable(selected = state.fitnessEstimateMode == mode, onClick = { viewModel.selectFitnessEstimateMode(mode) })
+                .padding(vertical = 8.dp),
+        ) {
+            RadioButton(selected = state.fitnessEstimateMode == mode, onClick = { viewModel.selectFitnessEstimateMode(mode) })
+            Spacer(Modifier.width(8.dp))
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+
+    when (state.fitnessEstimateMode) {
+        FitnessEstimateMode.DIRECT_ENTRY -> {
+            Spacer(Modifier.height(8.dp))
+            Text("Estimated finish time", style = MaterialTheme.typography.labelLarge)
+            Row {
+                OutlinedTextField(
+                    value = state.currentEstimateHoursInput,
+                    onValueChange = viewModel::updateCurrentEstimateHours,
+                    label = { Text("hr") },
+                    modifier = Modifier.width(90.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                OutlinedTextField(
+                    value = state.currentEstimateMinutesInput,
+                    onValueChange = viewModel::updateCurrentEstimateMinutes,
+                    label = { Text("min") },
+                    modifier = Modifier.width(90.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                OutlinedTextField(
+                    value = state.currentEstimateSecondsInput,
+                    onValueChange = viewModel::updateCurrentEstimateSeconds,
+                    label = { Text("sec") },
+                    modifier = Modifier.width(90.dp),
+                )
+            }
+        }
+        FitnessEstimateMode.CALCULATED -> {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Estimated from your swim CSS pace and a recent run personal best - the bike leg " +
+                    "isn't included since it depends too much on the course to estimate reliably.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text("Run PB distance", style = MaterialTheme.typography.labelLarge)
+            Row {
+                RUN_PB_DISTANCE_OPTIONS.forEach { (label, meters) ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.selectable(selected = state.runPbDistanceM == meters, onClick = { viewModel.updateRunPbDistance(meters) }),
+                    ) {
+                        RadioButton(selected = state.runPbDistanceM == meters, onClick = { viewModel.updateRunPbDistance(meters) })
+                        Text(label, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Spacer(Modifier.width(4.dp))
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text("PB time", style = MaterialTheme.typography.labelLarge)
+            Row {
+                OutlinedTextField(
+                    value = state.runPbMinutesInput,
+                    onValueChange = viewModel::updateRunPbMinutes,
+                    label = { Text("min") },
+                    modifier = Modifier.width(100.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                OutlinedTextField(
+                    value = state.runPbSecondsInput,
+                    onValueChange = viewModel::updateRunPbSeconds,
+                    label = { Text("sec") },
+                    modifier = Modifier.width(100.dp),
+                )
+            }
+            if (state.effectiveCssPaceSecPer100m == null) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "We don't have a swim CSS pace for you yet - add one on the previous step or " +
+                        "your Profile tab to use this option.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+        null -> Unit
+    }
+}
+
+@Composable
+private fun PlanReadyStep(planWarnings: List<String>) {
+    Text("Your plan is ready", style = MaterialTheme.typography.headlineSmall)
+    Spacer(Modifier.height(16.dp))
+    if (planWarnings.isEmpty()) {
+        Text("Everything checks out - good luck with training!", style = MaterialTheme.typography.bodyMedium)
+    } else {
+        planWarnings.forEach { warning ->
+            Text(warning, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.tertiary)
+            Spacer(Modifier.height(8.dp))
+        }
     }
 }
 

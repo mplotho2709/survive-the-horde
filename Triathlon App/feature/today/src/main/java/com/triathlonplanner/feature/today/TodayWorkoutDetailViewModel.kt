@@ -30,9 +30,7 @@ class TodayWorkoutDetailViewModel @Inject constructor(
             TodayWorkoutDetailUiState(isLoading = false, notFound = true)
         } else {
             TodayWorkoutDetailUiState(
-                planned = planned.toTodayView(profile),
-                steps = steps.sortedBy { it.stepOrder }.map { it.toStepView(planned.discipline, profile) },
-                actual = activity?.toActualView(),
+                legDetail = planned.toWorkoutLegView(profile, steps, activity),
                 isLoading = false,
             )
         }

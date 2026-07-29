@@ -1,42 +1,25 @@
 package com.triathlonplanner.feature.plan
 
+import com.triathlonplanner.core.designsystem.ActualWorkoutView
+import com.triathlonplanner.core.designsystem.WorkoutLegView
+import com.triathlonplanner.core.designsystem.WorkoutStepView
 import com.triathlonplanner.core.model.CompletedActivity
 import com.triathlonplanner.core.model.Discipline
 import com.triathlonplanner.core.model.GeneratedWorkoutStep
-import com.triathlonplanner.core.model.MatchStatus
 import com.triathlonplanner.core.model.PlannedWorkoutSnapshot
 import com.triathlonplanner.core.model.TrainingPhase
 import com.triathlonplanner.core.model.UserZoneProfile
 import com.triathlonplanner.core.model.WorkoutStatus
-import com.triathlonplanner.core.model.WorkoutStepType
 import com.triathlonplanner.data.repository.ResolvedZone
 import com.triathlonplanner.data.repository.ZoneKind
 import com.triathlonplanner.data.repository.ZoneResolver
 import java.time.LocalDate
 import java.time.YearMonth
 
-data class PlanStepView(
-    val stepType: WorkoutStepType,
-    val durationMin: Int,
-    val zoneLabel: String?,
-    val repeatCount: Int?,
-    val cueText: String?,
-)
-
-data class PlanActualWorkoutView(
-    val discipline: Discipline,
-    val disciplineLabel: String,
-    val durationMin: Int,
-    val distanceM: Double?,
-    val avgHr: Int?,
-    val avgPowerW: Int?,
-    val calculatedLoad: Int,
-    val matchStatus: MatchStatus,
-)
-
 /** One underlying planned workout row within a day - usually the whole day, but a brick day has
  * two (bike leg + run leg). Carries the full planned structure (steps/cues/zones) and whatever
- * completed activity matched it, so the Plan tab can show full detail directly with no extra tap. */
+ * completed activity matched it, so the Plan tab can show full detail directly with no extra tap.
+ * [detail] is the shared, renderable view - also used as-is by the Today tab. */
 data class DayLegView(
     val workoutId: Long,
     val title: String,
@@ -45,9 +28,19 @@ data class DayLegView(
     val plannedLoad: Int,
     val zoneLabel: String?,
     val status: WorkoutStatus,
-    val steps: List<PlanStepView> = emptyList(),
-    val actual: PlanActualWorkoutView? = null,
-)
+    val steps: List<WorkoutStepView> = emptyList(),
+    val actual: ActualWorkoutView? = null,
+) {
+    val detail: WorkoutLegView
+        get() = WorkoutLegView(
+            title = title,
+            durationMin = durationMin,
+            zoneLabel = zoneLabel,
+            status = status,
+            steps = steps,
+            actual = actual,
+        )
+}
 
 /** One calendar day's training, collapsed into a single unit even on brick days (bike + run
  * legs) - the Plan tab is day-based, not workout-based. */
@@ -91,8 +84,8 @@ fun PlannedWorkoutSnapshot.toLegView(
         plannedLoad = plannedLoad,
         zoneLabel = zoneLabel,
         status = status,
-        steps = steps.sortedBy { it.stepOrder }.map { it.toPlanStepView(discipline, profile) },
-        actual = activity?.toPlanActualView(),
+        steps = steps.sortedBy { it.stepOrder }.map { it.toWorkoutStepView(discipline, profile) },
+        actual = activity?.toActualWorkoutView(),
     )
 }
 
@@ -107,9 +100,9 @@ fun List<DayLegView>.toDayPlanView(date: LocalDate): DayPlanView {
     )
 }
 
-private fun GeneratedWorkoutStep.toPlanStepView(discipline: Discipline, profile: UserZoneProfile?): PlanStepView {
+private fun GeneratedWorkoutStep.toWorkoutStepView(discipline: Discipline, profile: UserZoneProfile?): WorkoutStepView {
     val resolved = intensityZone?.let { ZoneResolver.resolve(discipline, it, profile) }
-    return PlanStepView(
+    return WorkoutStepView(
         stepType = stepType,
         durationMin = (durationSec ?: 0) / 60,
         zoneLabel = zoneLabelFor(resolved),
@@ -118,7 +111,7 @@ private fun GeneratedWorkoutStep.toPlanStepView(discipline: Discipline, profile:
     )
 }
 
-private fun CompletedActivity.toPlanActualView(): PlanActualWorkoutView = PlanActualWorkoutView(
+private fun CompletedActivity.toActualWorkoutView(): ActualWorkoutView = ActualWorkoutView(
     discipline = discipline,
     disciplineLabel = disciplineLabel(discipline),
     durationMin = (durationSec / 60).toInt(),

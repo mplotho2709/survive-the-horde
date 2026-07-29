@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.triathlonplanner.core.designsystem.WorkoutLegDetail
 import com.triathlonplanner.core.model.WorkoutStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -50,15 +51,15 @@ fun TodayScreen(onWorkoutClick: (Long) -> Unit, viewModel: TodayViewModel = hilt
                     modifier = Modifier.padding(24.dp),
                 )
                 // Exactly one workout today - show its full breakdown directly, no extra tap needed.
-                state.workouts.size == 1 -> Column(
+                state.workouts.size == 1 && state.singleWorkoutDetail != null -> Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp)
                         .verticalScroll(rememberScrollState()),
                 ) {
-                    PlannedCard(state.workouts.single(), state.singleWorkoutSteps)
+                    Text(state.singleWorkoutDetail!!.title, style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(12.dp))
-                    ActualCard(state.workouts.single().status, state.singleWorkoutActual)
+                    WorkoutLegDetail(state.singleWorkoutDetail!!, showHeading = false)
                 }
                 else -> LazyColumn(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                     items(state.workouts, key = { it.id }) { workout ->

@@ -39,11 +39,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.triathlonplanner.core.model.Discipline
-import com.triathlonplanner.core.model.MatchStatus
+import com.triathlonplanner.core.designsystem.WorkoutLegDetail
 import com.triathlonplanner.core.model.TrainingPhase
-import com.triathlonplanner.core.model.WorkoutStatus
-import com.triathlonplanner.core.model.WorkoutStepType
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
@@ -196,7 +193,7 @@ private fun SelectedDayPanel(day: DayPlanView?, isWithinPlan: Boolean) {
                 }
                 Spacer(Modifier.height(12.dp))
                 day.legs.forEachIndexed { index, leg ->
-                    LegDetail(leg, showHeading = day.legs.size > 1)
+                    WorkoutLegDetail(leg.detail, showHeading = day.legs.size > 1)
                     if (index < day.legs.lastIndex) {
                         HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
                     }
@@ -206,71 +203,4 @@ private fun SelectedDayPanel(day: DayPlanView?, isWithinPlan: Boolean) {
             else -> Text("No plan for this day.", style = MaterialTheme.typography.titleMedium)
         }
     }
-}
-
-@Composable
-private fun LegDetail(leg: DayLegView, showHeading: Boolean) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        if (showHeading) {
-            Text(leg.title, style = MaterialTheme.typography.titleSmall)
-            Spacer(Modifier.height(4.dp))
-        }
-        Text("${leg.durationMin} min", style = MaterialTheme.typography.bodyMedium)
-        leg.zoneLabel?.let {
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-        }
-        if (leg.steps.isNotEmpty()) {
-            Spacer(Modifier.height(8.dp))
-            leg.steps.forEach { StepRow(it) }
-        }
-        Spacer(Modifier.height(12.dp))
-        Text("What you actually did", style = MaterialTheme.typography.titleSmall)
-        Spacer(Modifier.height(4.dp))
-        ActualSection(leg.status, leg.actual)
-    }
-}
-
-@Composable
-private fun StepRow(step: PlanStepView) {
-    Column(modifier = Modifier.padding(vertical = 4.dp)) {
-        val label = when (step.stepType) {
-            WorkoutStepType.WARMUP -> "Warmup"
-            WorkoutStepType.DRILL -> "Drill"
-            WorkoutStepType.MAIN -> "Main set"
-            WorkoutStepType.INTERVAL -> "Interval" + (step.repeatCount?.let { " (${it}x)" } ?: "")
-            WorkoutStepType.RECOVERY -> "Recovery" + (step.repeatCount?.let { " (${it}x)" } ?: "")
-            WorkoutStepType.COOLDOWN -> "Cooldown"
-        }
-        Text("$label - ${step.durationMin} min", style = MaterialTheme.typography.bodySmall)
-        step.zoneLabel?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
-        step.cueText?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-    }
-}
-
-@Composable
-private fun ActualSection(plannedStatus: WorkoutStatus, actual: PlanActualWorkoutView?) {
-    if (actual == null) {
-        Text(
-            when (plannedStatus) {
-                WorkoutStatus.MISSED -> "No activity recorded - this session was missed."
-                WorkoutStatus.PLANNED -> "Not completed yet."
-                else -> "No matching activity found."
-            },
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        return
-    }
-    if (actual.matchStatus == MatchStatus.SUBSTITUTED) {
-        Text("Substituted: ${actual.disciplineLabel}", style = MaterialTheme.typography.bodyMedium)
-    } else {
-        Text(actual.disciplineLabel, style = MaterialTheme.typography.bodyMedium)
-    }
-    Text("${actual.durationMin} min", style = MaterialTheme.typography.bodyMedium)
-    actual.distanceM?.let { meters ->
-        val distanceLabel = if (actual.discipline == Discipline.SWIM) "${meters.toInt()} m" else "%.1f km".format(meters / 1000)
-        Text(distanceLabel, style = MaterialTheme.typography.bodyMedium)
-    }
-    actual.avgHr?.let { Text("Avg HR: $it bpm", style = MaterialTheme.typography.bodyMedium) }
-    actual.avgPowerW?.let { Text("Avg power: $it W", style = MaterialTheme.typography.bodyMedium) }
-    Text("Load: ${actual.calculatedLoad}", style = MaterialTheme.typography.bodyMedium)
 }

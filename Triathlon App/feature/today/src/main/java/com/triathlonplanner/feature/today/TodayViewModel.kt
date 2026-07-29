@@ -39,8 +39,7 @@ class TodayViewModel @Inject constructor(
                 ) { steps, (_, activity) ->
                     TodayUiState(
                         workouts = listOf(single.toTodayView(profile)),
-                        singleWorkoutSteps = steps.sortedBy { it.stepOrder }.map { it.toStepView(single.discipline, profile) },
-                        singleWorkoutActual = activity?.toActualView(),
+                        singleWorkoutDetail = single.toWorkoutLegView(profile, steps, activity),
                         isLoading = false,
                     )
                 }

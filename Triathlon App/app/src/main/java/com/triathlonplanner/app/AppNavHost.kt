@@ -31,7 +31,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.triathlonplanner.feature.onboarding.OnboardingScreen
 import com.triathlonplanner.feature.plan.PlanScreen
-import com.triathlonplanner.feature.plan.PlanWeekDetailScreen
 import com.triathlonplanner.feature.profile.ProfileScreen
 import com.triathlonplanner.feature.progress.ProgressScreen
 import com.triathlonplanner.feature.today.TodayScreen
@@ -73,19 +72,10 @@ private fun MainScaffold() {
                 TodayScreen(onWorkoutClick = { workoutId -> navController.navigate(Route.TodayWorkoutDetail.buildRoute(workoutId)) })
             }
             composable(Route.Plan.route) {
-                PlanScreen(onWeekClick = { weekIndex -> navController.navigate(Route.PlanWeekDetail.buildRoute(weekIndex)) })
+                PlanScreen(onWorkoutClick = { workoutId -> navController.navigate(Route.TodayWorkoutDetail.buildRoute(workoutId)) })
             }
             composable(Route.Progress.route) { ProgressScreen() }
             composable(Route.Profile.route) { ProfileScreen() }
-            composable(
-                Route.PlanWeekDetail.route,
-                arguments = listOf(navArgument("weekIndex") { type = NavType.IntType }),
-            ) {
-                PlanWeekDetailScreen(
-                    onBack = { navController.popBackStack() },
-                    onWorkoutClick = { workoutId -> navController.navigate(Route.TodayWorkoutDetail.buildRoute(workoutId)) },
-                )
-            }
             composable(
                 Route.TodayWorkoutDetail.route,
                 arguments = listOf(navArgument("workoutId") { type = NavType.LongType }),

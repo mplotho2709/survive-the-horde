@@ -8,6 +8,7 @@ import com.triathlonplanner.core.model.RaceGoal
 import com.triathlonplanner.core.model.TrainingPhase
 import com.triathlonplanner.core.model.UserZoneProfile
 import com.triathlonplanner.core.model.WorkoutType
+import com.triathlonplanner.domain.zones.TrainingVolumeAdvisor
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -48,11 +49,29 @@ object PlanGenerator {
             raceGoal.currentFitnessEstimateSec,
             raceGoal.targetFinishTimeSec,
         )?.let { warnings += it }
+        // Separate failure from an aggressive target: the athlete committed to fewer weekly hours
+        // than their own goal implies, so the plan they agreed to can't deliver the time they set.
+        // Only meaningful when a goal time and a fitness estimate both exist - without them there
+        // is no gap-derived recommendation to fall short of.
+        if (raceGoal.targetFinishTimeSec != null && raceGoal.currentFitnessEstimateSec != null) {
+            TargetRealismCalculator.checkVolumeCommitment(
+                recommendedWeeklyHours = TrainingVolumeAdvisor.recommendedFor(
+                    raceGoal.distance,
+                    raceGoal.currentFitnessEstimateSec,
+                    raceGoal.targetFinishTimeSec,
+                ).weeklyHoursTarget,
+                committedWeeklyHours = raceGoal.trainingAvailability?.weeklyHoursTarget,
+            )?.let { warnings += it }
+        }
         val weeklyLoads = WeeklyLoadCurve.calculate(periodization.weeks)
 
         val generatedWeeks = periodization.weeks.mapIndexed { idx, weekPlan ->
             buildWeek(raceGoal, weekPlan, weeklyLoads[idx], firstMonday, profile)
         }
+
+        // Measured after generation, from actual time-in-zone across every step - the only point
+        // at which the real intensity distribution is knowable.
+        warnings += IntensityDistributionAuditor.auditPlan(generatedWeeks)
 
         return GeneratedPlan(
             raceGoal = raceGoal,

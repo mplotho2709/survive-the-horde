@@ -13,6 +13,7 @@ import com.triathlonplanner.data.repository.ActivitySyncRepository
 import com.triathlonplanner.data.repository.PlanRepository
 import com.triathlonplanner.data.repository.ProfileRepository
 import com.triathlonplanner.domain.zones.RaceTimePredictor
+import com.triathlonplanner.domain.zones.RunPaceZoneCalculator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -174,7 +175,13 @@ class OnboardingViewModel @Inject constructor(
             }
             null -> null
         }
-        _uiState.update { it.copy(resolvedCurrentEstimateSec = estimate) }
+        // A run PB gives us threshold pace regardless of which estimate path was chosen.
+        val thresholdPace = state.runPbDistanceM?.let { pbDistance ->
+            msToSecondsOrNull(state.runPbMinutesInput, state.runPbSecondsInput)?.let { pbTime ->
+                RunPaceZoneCalculator.thresholdPaceFromRacePb(pbDistance, pbTime)
+            }
+        }
+        _uiState.update { it.copy(resolvedCurrentEstimateSec = estimate, resolvedThresholdRunPaceSecPerKm = thresholdPace) }
     }
 
     /** Recomputes the recommended weekly-hours/days-per-week defaults for TRAINING_AVAILABILITY -
@@ -231,6 +238,7 @@ class OnboardingViewModel @Inject constructor(
                         ftpSource = if (ftpWatts != null) FtpSource.MANUAL else null,
                         cssPaceSecPer100m = cssPaceSecPer100m,
                         cssSource = if (cssPaceSecPer100m != null) CssSource.MANUAL else null,
+                        thresholdRunPaceSecPerKm = state.resolvedThresholdRunPaceSecPerKm,
                     )
                     profileRepository.saveProfile(newProfile)
                     newProfile

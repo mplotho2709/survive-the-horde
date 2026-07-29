@@ -51,14 +51,21 @@ class PeriodizationCalculatorTest {
     }
 
     @Test
-    fun `recovery weeks land every 4th week except in taper and race week`() {
+    fun `recovery weeks are scheduled against phase structure, not a fixed calendar modulus`() {
         val result = PeriodizationCalculator.calculate(Distance.OLYMPIC, totalWeeks = Distance.OLYMPIC.idealWeeks)
 
+        // Cutbacks exist, and they respect the placement rules rather than landing on week % 4.
+        // See DeloadSchedulingTest for the rules themselves, exercised across every distance and
+        // runway length; this pins the behaviour change for the canonical Olympic plan.
+        assertThat(result.weeks.count { it.isRecoveryWeek }).isAtLeast(2)
         result.weeks.forEach { week ->
-            val expectedRecovery = week.weekIndex % 4 == 0 &&
-                week.phase != TrainingPhase.TAPER && week.phase != TrainingPhase.RACE_WEEK
-            assertThat(week.isRecoveryWeek).isEqualTo(expectedRecovery)
+            if (week.phase == TrainingPhase.TAPER || week.phase == TrainingPhase.RACE_WEEK) {
+                assertThat(week.isRecoveryWeek).isFalse()
+            }
         }
+        // The old fixed rule put a cutback on week 8, which is the first week of Build here.
+        val firstBuildWeek = result.weeks.first { it.phase == TrainingPhase.BUILD }
+        assertThat(firstBuildWeek.isRecoveryWeek).isFalse()
     }
 
     @Test

@@ -39,7 +39,10 @@ object WorkoutStepBuilder {
         zone: IntensityZone?,
         workoutType: WorkoutType,
         discipline: Discipline,
-        profile: UserZoneProfile = UserZoneProfile(maxHr = 180, ftpWatts = 200, cssPaceSecPer100m = 90),
+        // Nullable rather than defaulted to a fabricated profile: inventing "the athlete has an
+        // FTP of 200W" to keep an overload convenient would silently produce cue text asserting
+        // metrics the user never provided. Null means "unknown", and reads as such below.
+        profile: UserZoneProfile? = null,
     ): List<GeneratedWorkoutStep> {
         if (workoutType == WorkoutType.STRENGTH_SESSION || workoutType == WorkoutType.REST) {
             return listOf(GeneratedWorkoutStep(stepOrder = 1, stepType = WorkoutStepType.MAIN, durationSec = durationSec, intensityZone = zone))
@@ -49,8 +52,9 @@ object WorkoutStepBuilder {
         // (see ZoneResolver) - this only decides whether *cue text* should stop naming a pace/power
         // metric the profile doesn't actually have.
         val usesHeartRateFallback = when (discipline) {
-            Discipline.SWIM -> profile.cssPaceSecPer100m == null
-            Discipline.BIKE, Discipline.BRICK_BIKE -> profile.ftpWatts == null
+            Discipline.SWIM -> profile?.cssPaceSecPer100m == null
+            Discipline.BIKE, Discipline.BRICK_BIKE -> profile?.ftpWatts == null
+            Discipline.RUN, Discipline.BRICK_RUN -> profile?.thresholdRunPaceSecPerKm == null
             else -> false
         }
 

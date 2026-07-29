@@ -5,10 +5,13 @@ import com.triathlonplanner.core.model.IntensityZone
 import com.triathlonplanner.core.model.UserZoneProfile
 import com.triathlonplanner.domain.zones.HrZoneCalculator
 import com.triathlonplanner.domain.zones.PowerZoneCalculator
+import com.triathlonplanner.domain.zones.RunPaceZoneCalculator
 import com.triathlonplanner.domain.zones.SwimPaceZoneCalculator
 import com.triathlonplanner.domain.zones.ZoneRange
 
-enum class ZoneKind { HEART_RATE, POWER, PACE }
+/** PACE is swim pace (sec/100m); RUN_PACE is run pace (sec/km) - different units, so they
+ * must not share a case or the UI will render one with the other's label. */
+enum class ZoneKind { HEART_RATE, POWER, PACE, RUN_PACE }
 
 /** A resolved zone plus which calculator actually produced it - callers must not infer the unit
  * (bpm/W/pace) from discipline alone, since e.g. a bike zone falls back to heart rate when FTP
@@ -39,7 +42,15 @@ object ZoneResolver {
                     ?.let { ResolvedZone(SwimPaceZoneCalculator.zoneFor(it, zone), ZoneKind.PACE) }
                     ?: ResolvedZone(HrZoneCalculator.zoneFor(profile.maxHr, profile.restingHr, zone), ZoneKind.HEART_RATE)
 
-            Discipline.RUN, Discipline.BRICK_RUN, Discipline.STRENGTH ->
+            // Run prefers threshold pace for the same reason bike prefers power: it measures
+            // external work directly, where HR lags, drifts with heat/fatigue and is blunted late
+            // in long sessions. Falls back to HR when no run PB has been provided.
+            Discipline.RUN, Discipline.BRICK_RUN ->
+                profile.thresholdRunPaceSecPerKm
+                    ?.let { ResolvedZone(RunPaceZoneCalculator.zoneFor(it, zone), ZoneKind.RUN_PACE) }
+                    ?: ResolvedZone(HrZoneCalculator.zoneFor(profile.maxHr, profile.restingHr, zone), ZoneKind.HEART_RATE)
+
+            Discipline.STRENGTH ->
                 ResolvedZone(HrZoneCalculator.zoneFor(profile.maxHr, profile.restingHr, zone), ZoneKind.HEART_RATE)
 
             Discipline.REST -> null

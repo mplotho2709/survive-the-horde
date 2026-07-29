@@ -105,10 +105,10 @@ object WeeklyTemplate {
 
         val sessions = when (phase) {
             TrainingPhase.RACE_WEEK -> raceWeekSessions(otherSwimSec, otherBikeSec, otherRunSec)
-            TrainingPhase.TAPER -> taperSessions(otherSwimSec, otherBikeSec, longRunSec, hardSec)
+            TrainingPhase.TAPER -> taperSessions(distance, otherSwimSec, otherBikeSec, longRunSec, hardSec)
             TrainingPhase.BASE -> baseSessions(otherSwimSec, otherBikeSec, otherRunSec, longBikeSec, longRunSec)
             TrainingPhase.BUILD -> buildSessions(distance, otherSwimSec, otherBikeSec, longBikeSec, longRunSec, hardSec, brickRunOffSec)
-            TrainingPhase.PEAK -> peakSessions(distance, otherSwimSec, longBikeSec, hardSec, brickRunOffSec)
+            TrainingPhase.PEAK -> peakSessions(distance, otherSwimSec, longBikeSec, longRunSec, hardSec, brickRunOffSec)
         }.map { it.copy(durationSec = it.durationSec.coerceAtLeast(MIN_SESSION_DURATION_SEC)) }
         return applyDayCap(sessions, availability?.daysPerWeekTarget)
     }
@@ -158,7 +158,12 @@ object WeeklyTemplate {
         WorkoutSpec(2, Discipline.BIKE, WorkoutType.EASY, bikeSec, zone = IntensityZone(2)),
         WorkoutSpec(4, Discipline.STRENGTH, WorkoutType.STRENGTH_SESSION, 40 * 60),
         WorkoutSpec(5, Discipline.RUN, WorkoutType.THRESHOLD, hardSec, zone = IntensityZone(4)),
-        WorkoutSpec(6, Discipline.BRICK_BIKE, WorkoutType.TEMPO, hardSec, zone = IntensityZone(3), isBrickLeg = true, sortOrderInDay = 0),
+        // The long ride *is* the brick's bike leg. Two reasons this isn't the Zone 3 tempo block it
+        // used to be: (1) longBikeSec was previously accepted and never used, so the Build phase
+        // shipped with no long ride at all - the single most important aerobic session in
+        // triathlon; (2) running off a long aerobic ride is the specific adaptation a brick exists
+        // to train, and doing it off a grey-zone tempo effort buys fatigue instead.
+        WorkoutSpec(6, Discipline.BRICK_BIKE, WorkoutType.LONG, longBikeSec, zone = IntensityZone(2), isBrickLeg = true, sortOrderInDay = 0),
         WorkoutSpec(6, Discipline.BRICK_RUN, WorkoutType.RACE_PACE, brickRunOffSec, zone = raceZoneFor(distance), isBrickLeg = true, sortOrderInDay = 1),
         WorkoutSpec(7, Discipline.RUN, WorkoutType.LONG, longRunSec, zone = IntensityZone(1)),
     )
@@ -167,25 +172,35 @@ object WeeklyTemplate {
         distance: Distance,
         swimSec: Int,
         longBikeSec: Int,
+        longRunSec: Int,
         hardSec: Int,
         brickRunOffSec: Int,
     ): List<WorkoutSpec> {
         val raceZone = raceZoneFor(distance)
         return listOf(
             WorkoutSpec(1, Discipline.SWIM, WorkoutType.EASY, swimSec, zone = IntensityZone(2)),
-            WorkoutSpec(3, Discipline.SWIM, WorkoutType.RACE_PACE, hardSec, zone = IntensityZone(3)),
+            // Swim race pace tracks the actual race zone like every other discipline; it was
+            // previously pinned to Zone 3 regardless of distance, which both contradicted the
+            // run/brick legs of the same race and parked volume in the grey zone.
+            WorkoutSpec(3, Discipline.SWIM, WorkoutType.RACE_PACE, hardSec, zone = raceZone),
             WorkoutSpec(2, Discipline.BIKE, WorkoutType.VO2MAX, hardSec, zone = IntensityZone(5)),
-            WorkoutSpec(5, Discipline.RUN, WorkoutType.RACE_PACE, hardSec, zone = raceZone),
             WorkoutSpec(6, Discipline.BRICK_BIKE, WorkoutType.RACE_PACE, hardSec, zone = raceZone, isBrickLeg = true, sortOrderInDay = 0),
             WorkoutSpec(6, Discipline.BRICK_RUN, WorkoutType.RACE_PACE, brickRunOffSec, zone = raceZone, isBrickLeg = true, sortOrderInDay = 1),
             WorkoutSpec(7, Discipline.BIKE, WorkoutType.LONG, longBikeSec, zone = IntensityZone(2)),
+            // Restores the long run, which Peak previously dropped entirely - leaving the phase
+            // with a long ride but no long run, and five separate quality sessions in one week.
+            // The standalone race-pace run it replaces is already covered by the brick's run leg.
+            WorkoutSpec(5, Discipline.RUN, WorkoutType.LONG, longRunSec, zone = IntensityZone(1)),
         )
     }
 
-    private fun taperSessions(swimSec: Int, bikeSec: Int, longRunSec: Int, hardSec: Int): List<WorkoutSpec> = listOf(
+    private fun taperSessions(distance: Distance, swimSec: Int, bikeSec: Int, longRunSec: Int, hardSec: Int): List<WorkoutSpec> = listOf(
         WorkoutSpec(1, Discipline.SWIM, WorkoutType.EASY, (swimSec * 0.6).toInt(), zone = IntensityZone(1)),
         WorkoutSpec(3, Discipline.BIKE, WorkoutType.EASY, (bikeSec * 0.6).toInt(), zone = IntensityZone(2)),
-        WorkoutSpec(4, Discipline.RUN, WorkoutType.RACE_PACE, hardSec, zone = IntensityZone(3)),
+        // Taper's job is to hold race feel while shedding fatigue, so this session must sit at the
+        // athlete's *actual* race intensity. Pinning it to Zone 3 regardless of distance parked
+        // taper volume in the grey zone - the one place a polarized plan least wants it.
+        WorkoutSpec(4, Discipline.RUN, WorkoutType.RACE_PACE, hardSec, zone = raceZoneFor(distance)),
         WorkoutSpec(6, Discipline.BIKE, WorkoutType.EASY, (bikeSec * 0.5).toInt(), zone = IntensityZone(1)),
         WorkoutSpec(7, Discipline.RUN, WorkoutType.EASY, (longRunSec * 0.35).toInt(), zone = IntensityZone(1)),
     )

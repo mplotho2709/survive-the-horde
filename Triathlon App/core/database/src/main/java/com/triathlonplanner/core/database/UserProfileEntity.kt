@@ -17,6 +17,7 @@ data class UserProfileEntity(
     val ftpSource: String?,
     val cssPaceSecPer100m: Int?,
     val cssSource: String?,
+    val thresholdRunPaceSecPerKm: Int? = null,
     val weightKg: Double?,
     val updatedAtEpochMilli: Long,
 ) {

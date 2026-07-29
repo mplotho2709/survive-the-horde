@@ -127,6 +127,7 @@ private fun zoneLabelFor(resolved: ResolvedZone?): String? = when (resolved?.kin
     ZoneKind.PACE -> "Zone ${resolved.range.zone.level} (${formatPace(resolved.range.upperBound)}-${formatPace(resolved.range.lowerBound)} /100m)"
     ZoneKind.POWER -> "Zone ${resolved.range.zone.level} (${resolved.range.lowerBound}-${resolved.range.upperBound} W)"
     ZoneKind.HEART_RATE -> "Zone ${resolved.range.zone.level} (${resolved.range.lowerBound}-${resolved.range.upperBound} bpm)"
+    ZoneKind.RUN_PACE -> "Zone ${resolved.range.zone.level} (${formatPace(resolved.range.lowerBound)}-${formatPace(resolved.range.upperBound)} /km)"
 }
 
 private fun disciplineLabel(discipline: Discipline): String = when (discipline) {

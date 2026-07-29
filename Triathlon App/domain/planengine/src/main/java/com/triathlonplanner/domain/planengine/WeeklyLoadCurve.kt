@@ -8,6 +8,13 @@ import kotlin.math.roundToInt
  * completed load is derived) for each week: <=8% growth per non-recovery week (within the
  * ceiling of AdaptationEngine.MAX_WEEK_OVER_WEEK_GROWTH), a cutback on recovery weeks, a rebound
  * slightly above the pre-cutback peak afterwards, and a hard reduction through Taper/RaceWeek.
+ *
+ * The "no more than ~10% per week" progression rule is enforced here, not merely intended: every
+ * increase is clamped against [AdaptationEngine.MAX_WEEK_OVER_WEEK_GROWTH] before being emitted.
+ * The one deliberate exception is the week immediately after a cutback, where load returns toward
+ * the pre-cutback peak. That is not overload - the athlete already tolerated that load before the
+ * cutback, and supercompensation after a recovery week is the entire reason to take one. Applying
+ * a naive 10% cap there would ratchet the plan permanently downward every time it deloaded.
  */
 object WeeklyLoadCurve {
 
@@ -27,13 +34,25 @@ object WeeklyLoadCurve {
 
         weeks.forEachIndexed { index, week ->
             val previous = weeks.getOrNull(index - 1)
-            val load = when {
+            val reboundingFromCutback = previous?.isRecoveryWeek == true
+            val raw = when {
                 week.phase == TrainingPhase.RACE_WEEK -> peakSoFar * RACE_WEEK_FACTOR
                 week.phase == TrainingPhase.TAPER -> peakSoFar * TAPER_FACTOR
                 week.isRecoveryWeek -> peakSoFar * CUTBACK_FACTOR
                 index == 0 -> STARTING_LOAD
-                previous?.isRecoveryWeek == true -> peakSoFar * REBOUND_FACTOR
+                reboundingFromCutback -> peakSoFar * REBOUND_FACTOR
                 else -> loads[index - 1] * WEEKLY_GROWTH
+            }
+
+            // Hard progression boundary. Skipped only for the post-cutback rebound (bounded
+            // instead by the pre-cutback peak, which the athlete has already absorbed) and for
+            // Taper/RaceWeek, which are reductions and can never breach an increase ceiling.
+            val load = if (reboundingFromCutback || index == 0 || week.phase == TrainingPhase.TAPER ||
+                week.phase == TrainingPhase.RACE_WEEK || week.isRecoveryWeek
+            ) {
+                raw
+            } else {
+                minOf(raw, loads[index - 1] * AdaptationEngine.MAX_WEEK_OVER_WEEK_GROWTH)
             }
 
             if (week.phase !in listOf(TrainingPhase.TAPER, TrainingPhase.RACE_WEEK) && !week.isRecoveryWeek) {

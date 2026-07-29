@@ -43,6 +43,7 @@ fun UserProfileEntity.toDomain(): UserZoneProfile = UserZoneProfile(
     ftpSource = ftpSource?.let { FtpSource.valueOf(it) },
     cssPaceSecPer100m = cssPaceSecPer100m,
     cssSource = cssSource?.let { CssSource.valueOf(it) },
+    thresholdRunPaceSecPerKm = thresholdRunPaceSecPerKm,
     weightKg = weightKg,
 )
 
@@ -53,6 +54,7 @@ fun UserZoneProfile.toEntity(updatedAt: Instant): UserProfileEntity = UserProfil
     ftpSource = ftpSource?.name,
     cssPaceSecPer100m = cssPaceSecPer100m,
     cssSource = cssSource?.name,
+    thresholdRunPaceSecPerKm = thresholdRunPaceSecPerKm,
     weightKg = weightKg,
     updatedAtEpochMilli = updatedAt.toEpochMilli(),
 )

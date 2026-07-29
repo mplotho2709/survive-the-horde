@@ -42,6 +42,9 @@ data class OnboardingUiState(
     val runPbMinutesInput: String = "",
     val runPbSecondsInput: String = "",
     val resolvedCurrentEstimateSec: Int? = null,
+    // Derived from the run PB on the CURRENT_FITNESS step; persisted onto the profile so run
+    // workouts can be prescribed in pace rather than heart rate.
+    val resolvedThresholdRunPaceSecPerKm: Int? = null,
     val planWarnings: List<String> = emptyList(),
     val isSaving: Boolean = false,
     val isComplete: Boolean = false,

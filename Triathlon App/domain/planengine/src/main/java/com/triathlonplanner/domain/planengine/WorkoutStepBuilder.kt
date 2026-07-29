@@ -166,9 +166,31 @@ object WorkoutStepBuilder {
             WorkoutStepType.COOLDOWN -> "Easy effort, gradually reduce to a full stop."
             WorkoutStepType.MAIN -> when (workoutType) {
                 WorkoutType.RACE_PACE -> "Settle into your target race effort."
+                WorkoutType.EASY -> cueForEasy(discipline)
+                WorkoutType.LONG -> cueForLong(discipline)
+                WorkoutType.RECOVERY -> "Very easy effort - this is about recovery, not fitness gains."
+                WorkoutType.FTP_TEST -> "Pace evenly across the full test - a slight negative split beats blowing up early."
+                WorkoutType.CSS_TEST -> "Best sustainable effort for the full distance - stay smooth, don't sprint the start."
+                // Session was too short to fit even one full interval rep (see buildIntervalSteps'
+                // fallback) - still the same target effort, just continuous instead of broken into reps.
+                WorkoutType.THRESHOLD, WorkoutType.VO2MAX, WorkoutType.TEMPO -> cueForIntervalWork(discipline, workoutType)
                 else -> null
             }
         }
+    }
+
+    private fun cueForEasy(discipline: Discipline): String = when (discipline) {
+        Discipline.SWIM -> "Smooth, relaxed pace - focus on consistent technique, not speed."
+        Discipline.BIKE, Discipline.BRICK_BIKE -> "Easy, conversational pace - you should be able to chat."
+        Discipline.RUN -> "Easy, conversational pace - resist the urge to push the effort."
+        else -> "Comfortable, conversational effort."
+    }
+
+    private fun cueForLong(discipline: Discipline): String = when (discipline) {
+        Discipline.SWIM -> "Steady aerobic pace - settle in and keep your stroke consistent for the distance."
+        Discipline.BIKE, Discipline.BRICK_BIKE -> "Steady aerobic effort - settle in, fuel and hydrate regularly."
+        Discipline.RUN -> "Steady aerobic effort - keep it comfortable, this builds endurance, not speed."
+        else -> "Steady aerobic effort - keep it comfortable for the full distance."
     }
 
     private fun cueForIntervalWork(discipline: Discipline, workoutType: WorkoutType): String? = when (workoutType) {

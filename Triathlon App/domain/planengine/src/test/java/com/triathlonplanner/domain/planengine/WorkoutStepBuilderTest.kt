@@ -63,6 +63,19 @@ class WorkoutStepBuilderTest {
     }
 
     @Test
+    fun `easy, long, and recovery main blocks all get a cue, not just interval-type sessions`() {
+        // EASY/LONG/RECOVERY are the bulk of all training (polarized 80 percent) - a MAIN block
+        // with no cue at all left the user with just "Main set - 21 min" and no guidance.
+        val easy = WorkoutStepBuilder.build(durationSec = 30 * 60, zone = IntensityZone(2), workoutType = WorkoutType.EASY, discipline = Discipline.SWIM)
+        val long = WorkoutStepBuilder.build(durationSec = 60 * 60, zone = IntensityZone(1), workoutType = WorkoutType.LONG, discipline = Discipline.RUN)
+        val recovery = WorkoutStepBuilder.build(durationSec = 20 * 60, zone = IntensityZone(1), workoutType = WorkoutType.RECOVERY, discipline = Discipline.BIKE)
+
+        assertThat(easy.single { it.stepType == WorkoutStepType.MAIN }.cueText).isNotNull()
+        assertThat(long.single { it.stepType == WorkoutStepType.MAIN }.cueText).isNotNull()
+        assertThat(recovery.single { it.stepType == WorkoutStepType.MAIN }.cueText).isNotNull()
+    }
+
+    @Test
     fun `strength session is a single block with no warmup-cooldown split`() {
         val steps = WorkoutStepBuilder.build(durationSec = 2400, zone = null, workoutType = WorkoutType.STRENGTH_SESSION, discipline = Discipline.STRENGTH)
 

@@ -81,7 +81,10 @@ private fun MainScaffold() {
                 Route.PlanWeekDetail.route,
                 arguments = listOf(navArgument("weekIndex") { type = NavType.IntType }),
             ) {
-                PlanWeekDetailScreen(onBack = { navController.popBackStack() })
+                PlanWeekDetailScreen(
+                    onBack = { navController.popBackStack() },
+                    onWorkoutClick = { workoutId -> navController.navigate(Route.TodayWorkoutDetail.buildRoute(workoutId)) },
+                )
             }
             composable(
                 Route.TodayWorkoutDetail.route,

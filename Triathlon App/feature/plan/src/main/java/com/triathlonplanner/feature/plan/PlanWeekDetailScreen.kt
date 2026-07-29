@@ -1,5 +1,6 @@
 package com.triathlonplanner.feature.plan
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -28,7 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PlanWeekDetailScreen(onBack: () -> Unit, viewModel: PlanWeekDetailViewModel = hiltViewModel()) {
+fun PlanWeekDetailScreen(onBack: () -> Unit, onWorkoutClick: (Long) -> Unit, viewModel: PlanWeekDetailViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     Scaffold(
@@ -54,7 +55,9 @@ fun PlanWeekDetailScreen(onBack: () -> Unit, viewModel: PlanWeekDetailViewModel 
                 state.isLoading -> CircularProgressIndicator(Modifier.padding(24.dp))
                 state.workouts.isEmpty() -> Text("No workouts this week.", modifier = Modifier.padding(24.dp))
                 else -> LazyColumn(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-                    items(state.workouts, key = { it.id }) { workout -> WorkoutDetailCard(workout) }
+                    items(state.workouts, key = { it.id }) { workout ->
+                        WorkoutDetailCard(workout, onClick = { onWorkoutClick(workout.id) })
+                    }
                 }
             }
         }
@@ -62,8 +65,8 @@ fun PlanWeekDetailScreen(onBack: () -> Unit, viewModel: PlanWeekDetailViewModel 
 }
 
 @Composable
-private fun WorkoutDetailCard(workout: PlanWorkoutDetailView) {
-    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+private fun WorkoutDetailCard(workout: PlanWorkoutDetailView, onClick: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp).clickable(onClick = onClick)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 "${workout.date} - ${workout.workoutType.name.lowercase().replaceFirstChar(Char::uppercase)} " +

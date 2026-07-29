@@ -71,9 +71,7 @@ private fun MainScaffold() {
             composable(Route.Today.route) {
                 TodayScreen(onWorkoutClick = { workoutId -> navController.navigate(Route.TodayWorkoutDetail.buildRoute(workoutId)) })
             }
-            composable(Route.Plan.route) {
-                PlanScreen(onWorkoutClick = { workoutId -> navController.navigate(Route.TodayWorkoutDetail.buildRoute(workoutId)) })
-            }
+            composable(Route.Plan.route) { PlanScreen() }
             composable(Route.Progress.route) { ProgressScreen() }
             composable(Route.Profile.route) { ProfileScreen() }
             composable(

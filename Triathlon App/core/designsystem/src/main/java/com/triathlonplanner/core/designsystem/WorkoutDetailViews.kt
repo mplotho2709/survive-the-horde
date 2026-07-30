@@ -68,7 +68,10 @@ fun WorkoutLegHeader(leg: WorkoutLegView, showTitle: Boolean, modifier: Modifier
     val visual = visualFor(leg.discipline)
     val (statusLabel, statusTone) = statusToneFor(leg.status)
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        DisciplineBadge(visual.icon, visual.color, visual.label)
+        // Neutral, not discipline-tinted. The glyph already names the sport, and this card's colour
+        // belongs to the zone ramp - a coloured sport badge sitting beside zone-coloured rails puts
+        // two unrelated colour systems in one card and makes neither read cleanly.
+        DisciplineBadge(visual.icon, MaterialTheme.colorScheme.onSurfaceVariant, visual.label)
         Spacer(Modifier.width(AppSpacing.md))
         Column(Modifier.weight(1f)) {
             if (showTitle) {

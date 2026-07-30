@@ -40,6 +40,24 @@ data class AppAccents(
     val phasePeak: Color,
     val phaseTaper: Color,
     val phaseRaceWeek: Color,
+    /**
+     * Intensity-zone ramp, indexed 0-based for zones 1..7 (power uses all seven; heart rate, swim
+     * pace and run pace use the first five).
+     *
+     * This follows the grey/blue/green/amber/red/magenta/violet convention every training platform
+     * shares, because an athlete arriving from Garmin or TrainingPeaks already reads "red" as "very
+     * hard" - inventing a single-hue ramp would be technically tidier and practically worse. It is
+     * an *ordinal* scale, so the categorical validator's chroma-floor and lightness-band checks
+     * don't apply (a deliberately grey Zone 1 is the point). What does apply, and what was
+     * verified: adjacent-pair colourblind separation and adjacent-pair normal-vision separation both
+     * clear their floors in both modes, and every step clears 3:1 contrast in dark mode.
+     *
+     * Three light-mode steps sit under 3:1 on the light surface, which the validator flags as
+     * "relief required". That is satisfied structurally: a zone colour never appears without its
+     * "Z<n>" number or "Zone <n>" label beside it, so the colour reinforces an identity the text
+     * already carries rather than being the sole signal.
+     */
+    val zones: List<Color>,
 )
 
 private val LightAccents = AppAccents(
@@ -56,6 +74,15 @@ private val LightAccents = AppAccents(
     phasePeak = Color(0xFFEB6834),
     phaseTaper = Color(0xFFAFC6E6),
     phaseRaceWeek = Color(0xFFC7431C),
+    zones = listOf(
+        Color(0xFF8A94A0), // Z1 recovery
+        Color(0xFF2A78D6), // Z2 aerobic
+        Color(0xFF1BAF7A), // Z3 tempo
+        Color(0xFFDE9526), // Z4 threshold
+        Color(0xFFD9422E), // Z5 VO2max
+        Color(0xFFB0399F), // Z6 anaerobic
+        Color(0xFF5B2E9E), // Z7 neuromuscular
+    ),
 )
 
 private val DarkAccents = AppAccents(
@@ -72,6 +99,15 @@ private val DarkAccents = AppAccents(
     phasePeak = Color(0xFFD95926),
     phaseTaper = Color(0xFF3B5474),
     phaseRaceWeek = Color(0xFFFF8B5E),
+    zones = listOf(
+        Color(0xFF5F6A77), // Z1 recovery
+        Color(0xFF3987E5), // Z2 aerobic
+        Color(0xFF199E70), // Z3 tempo
+        Color(0xFFD4A017), // Z4 threshold
+        Color(0xFFE45744), // Z5 VO2max
+        Color(0xFFD473C4), // Z6 anaerobic
+        Color(0xFF6E5AD8), // Z7 neuromuscular
+    ),
 )
 
 internal fun accentsFor(darkTheme: Boolean): AppAccents = if (darkTheme) DarkAccents else LightAccents

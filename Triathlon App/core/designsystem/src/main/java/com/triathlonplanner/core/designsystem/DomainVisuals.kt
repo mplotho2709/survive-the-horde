@@ -73,6 +73,17 @@ fun statusToneFor(status: WorkoutStatus): Pair<String, Color> {
     }
 }
 
+/**
+ * Colour for an intensity zone level (1..7). Clamped rather than throwing: a zone level is data from
+ * the database, and a rendering helper is the wrong place to crash over an out-of-range value.
+ */
+@Composable
+@ReadOnlyComposable
+fun colorForZone(level: Int): Color {
+    val zones = LocalAppAccents.current.zones
+    return zones[(level - 1).coerceIn(0, zones.lastIndex)]
+}
+
 val SubstitutionIcon: ImageVector get() = Icons.Filled.SwapHoriz
 
 /** "1h 25m" / "45m" - compact duration used wherever a session length appears. */

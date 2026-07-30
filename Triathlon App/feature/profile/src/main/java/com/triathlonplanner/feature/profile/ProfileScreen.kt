@@ -37,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -48,6 +49,7 @@ import com.triathlonplanner.core.designsystem.AppRadius
 import com.triathlonplanner.core.designsystem.AppSpacing
 import com.triathlonplanner.core.designsystem.SectionHeader
 import com.triathlonplanner.core.designsystem.accents
+import com.triathlonplanner.core.designsystem.colorForZone
 import com.triathlonplanner.data.healthconnect.HealthConnectAvailability
 import com.triathlonplanner.data.healthconnect.HealthConnectPermissions
 import com.triathlonplanner.data.healthconnect.healthConnectPermissionRequestContract
@@ -159,9 +161,9 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
 
             Spacer(Modifier.height(AppSpacing.md))
 
-            ZoneCard("Heart rate zones", state.hrZones, "bpm", MaterialTheme.accents.run)
-            ZoneCard("Power zones", state.powerZones, "W", MaterialTheme.accents.bike)
-            ZoneCard("Swim pace zones", state.swimZones, "/100m", MaterialTheme.accents.swim)
+            ZoneCard("Heart rate zones", state.hrZones, "bpm")
+            ZoneCard("Power zones", state.powerZones, "W")
+            ZoneCard("Swim pace zones", state.swimZones, "/100m")
 
             AppCard(Modifier.fillMaxWidth()) {
                 SectionHeader("Health Connect")
@@ -262,24 +264,38 @@ private fun NumberField(
  * to the widest one and the accent deepens with zone level, so the intensity ramp is visible at a
  * glance instead of having to be reconstructed from five pairs of numbers.
  */
+/**
+ * Zone table drawn as proportional bars, each in its own zone colour. Bar length shows where the
+ * band sits relative to the widest one, and the colour is the same ramp the Plan and Today tabs use,
+ * so "Z4" means one recognisable thing everywhere in the app. The Z-number carries identity; colour
+ * only reinforces it.
+ */
 @Composable
-private fun ZoneCard(title: String, zones: List<ZoneRange>, unit: String, accent: Color) {
+private fun ZoneCard(title: String, zones: List<ZoneRange>, unit: String) {
     if (zones.isEmpty()) return
     val maxBound = zones.maxOf { maxOf(it.lowerBound, it.upperBound) }.coerceAtLeast(1)
 
     AppCard(Modifier.fillMaxWidth()) {
         SectionHeader(title)
         Spacer(Modifier.height(AppSpacing.md))
-        zones.forEachIndexed { index, zone ->
-            val ramp = 0.30f + 0.70f * (index.toFloat() / (zones.size - 1).coerceAtLeast(1))
+        zones.forEach { zone ->
+            val zoneColor = colorForZone(zone.zone.level)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "Z${zone.zone.level}",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = accent,
-                    modifier = Modifier.width(26.dp),
-                )
+                Box(
+                    Modifier
+                        .size(24.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(zoneColor),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "${zone.zone.level}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+                }
+                Spacer(Modifier.width(AppSpacing.md))
                 Column(Modifier.weight(1f)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text(zone.label, style = MaterialTheme.typography.bodySmall)
@@ -289,11 +305,11 @@ private fun ZoneCard(title: String, zones: List<ZoneRange>, unit: String, accent
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Spacer(Modifier.height(3.dp))
+                    Spacer(Modifier.height(4.dp))
                     Box(
                         Modifier
                             .fillMaxWidth()
-                            .height(4.dp)
+                            .height(5.dp)
                             .background(MaterialTheme.accents.track, RoundedCornerShape(AppRadius.pill)),
                     ) {
                         Box(
@@ -301,13 +317,13 @@ private fun ZoneCard(title: String, zones: List<ZoneRange>, unit: String, accent
                                 .fillMaxWidth(
                                     (maxOf(zone.lowerBound, zone.upperBound).toFloat() / maxBound).coerceIn(0f, 1f),
                                 )
-                                .height(4.dp)
-                                .background(accent.copy(alpha = ramp), RoundedCornerShape(AppRadius.pill)),
+                                .height(5.dp)
+                                .background(zoneColor, RoundedCornerShape(AppRadius.pill)),
                         )
                     }
                 }
             }
-            if (index < zones.lastIndex) Spacer(Modifier.height(AppSpacing.sm))
+            Spacer(Modifier.height(AppSpacing.sm))
         }
     }
     Spacer(Modifier.height(AppSpacing.md))

@@ -43,6 +43,7 @@ fun PlannedWorkoutSnapshot.toWorkoutLegView(
         discipline = discipline,
         durationMin = plannedDurationSec / 60,
         zoneLabel = zoneLabel,
+        zoneLevel = zone?.level,
         status = status,
         steps = steps.sortedBy { it.stepOrder }.map { it.toWorkoutStepView(discipline, profile) },
         actual = activity?.toActualWorkoutView(),
@@ -55,6 +56,7 @@ private fun GeneratedWorkoutStep.toWorkoutStepView(discipline: Discipline, profi
         stepType = stepType,
         durationMin = (durationSec ?: 0) / 60,
         zoneLabel = zoneLabelFor(resolved),
+        zoneLevel = intensityZone?.level,
         repeatCount = repeatCount,
         cueText = cueText,
     )

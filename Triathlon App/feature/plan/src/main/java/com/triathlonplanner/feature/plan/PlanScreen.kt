@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -227,11 +226,20 @@ private fun DayCell(
                 fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
             )
             if (info != null && info.disciplines.isNotEmpty()) {
-                Spacer(Modifier.height(2.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    // Capped at three: more dots than that stops being readable at this cell size.
+                Spacer(Modifier.height(1.dp))
+                // Sport is shown as a *symbol* rather than a colour: a bike icon says "bike"
+                // outright, where a coloured dot needs a legend the calendar has no room for.
+                // Drawn in ink rather than the discipline hue for the same reason - the shape is
+                // doing the work. Capped at three, which is more sessions than any day holds.
+                Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
                     info.disciplines.take(3).forEach { discipline ->
-                        Box(Modifier.size(4.dp).background(visualFor(discipline).color, CircleShape))
+                        val visual = visualFor(discipline)
+                        Icon(
+                            visual.icon,
+                            contentDescription = visual.label,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(11.dp),
+                        )
                     }
                 }
             }

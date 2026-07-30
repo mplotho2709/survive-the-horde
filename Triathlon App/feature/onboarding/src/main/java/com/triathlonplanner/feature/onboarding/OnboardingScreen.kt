@@ -335,11 +335,17 @@ private fun DistanceStep(selected: Distance?, onSelect: (Distance) -> Unit) {
     }
 }
 
-/** Dot plus distance, reusing the validated discipline hues so legs are recognisable at a glance. */
+/** Sport glyph plus distance. The icon names the leg, so no colour is needed to tell them apart. */
 @Composable
 private fun LegChip(discipline: Discipline, text: String) {
+    val visual = visualFor(discipline)
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(6.dp).background(visualFor(discipline).color, CircleShape))
+        Icon(
+            visual.icon,
+            contentDescription = visual.label,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(13.dp),
+        )
         Spacer(Modifier.width(AppSpacing.xs))
         Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -565,13 +571,12 @@ private fun TrainingDaysStep(state: OnboardingUiState, viewModel: OnboardingView
     listOf(Discipline.SWIM, Discipline.BIKE, Discipline.RUN).forEach { discipline ->
         val visual = visualFor(discipline)
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = AppSpacing.xs)) {
-            DisciplineBadge(visual.icon, visual.color, visual.label, size = 28.dp)
+            DisciplineBadge(visual.icon, MaterialTheme.colorScheme.onSurfaceVariant, visual.label, size = 28.dp)
             Spacer(Modifier.width(AppSpacing.sm))
             Text(visual.label, style = MaterialTheme.typography.titleSmall)
         }
         DayToggleRow(
             selected = state.daysFor(discipline),
-            accent = visual.color,
             onToggle = { day -> viewModel.toggleTrainingDay(discipline, day) },
         )
         if (state.daysFor(discipline).isEmpty()) {
@@ -590,7 +595,6 @@ private fun TrainingDaysStep(state: OnboardingUiState, viewModel: OnboardingView
     Spacer(Modifier.height(AppSpacing.sm))
     DayToggleRow(
         selected = state.longSessionDays,
-        accent = MaterialTheme.colorScheme.primary,
         onToggle = viewModel::toggleLongSessionDay,
     )
     if (state.longSessionDays.isEmpty()) {
@@ -602,13 +606,15 @@ private fun TrainingDaysStep(state: OnboardingUiState, viewModel: OnboardingView
     }
 }
 
-/** Seven compact toggles, Monday first. */
+/** Seven compact toggles, Monday first. Selection uses the brand accent, not a per-sport hue -
+ * these are all the same kind of control, so tinting them by sport implied a distinction that
+ * doesn't exist. The row's own heading says which sport it belongs to. */
 @Composable
 private fun DayToggleRow(
     selected: Set<DayOfWeek>,
-    accent: Color,
     onToggle: (DayOfWeek) -> Unit,
 ) {
+    val accent = MaterialTheme.colorScheme.primary
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(AppSpacing.xs),

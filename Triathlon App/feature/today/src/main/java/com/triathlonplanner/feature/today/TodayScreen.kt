@@ -138,7 +138,9 @@ private fun WorkoutRowCard(workout: TodayWorkoutView, onClick: () -> Unit) {
 
     AppCard(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            DisciplineBadge(visual.icon, visual.color, visual.label)
+            // Neutral like every other sport badge in the app - the glyph names the sport, and
+            // colour is reserved for training intensity.
+            DisciplineBadge(visual.icon, MaterialTheme.colorScheme.onSurfaceVariant, visual.label)
             Spacer(Modifier.width(AppSpacing.md))
             Column(Modifier.weight(1f)) {
                 Text(workout.title, style = MaterialTheme.typography.titleMedium)

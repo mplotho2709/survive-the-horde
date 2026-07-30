@@ -1,5 +1,10 @@
 package com.triathlonplanner.feature.plan
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,6 +17,10 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -28,12 +37,16 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -55,6 +68,9 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
+
+/** Weeks rendered per month - fixed so the grid is the same height for every month. */
+private const val CALENDAR_ROWS = 6
 
 private val WEEKDAYS = listOf(
     DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY,
@@ -85,20 +101,15 @@ fun PlanScreen(viewModel: PlanViewModel = hiltViewModel()) {
                         onPrev = viewModel::goToPreviousMonth,
                         onNext = viewModel::goToNextMonth,
                     )
-                    AppCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(AppSpacing.sm),
-                    ) {
-                        WeekdayHeaderRow()
-                        Spacer(Modifier.height(AppSpacing.xs))
-                        CalendarGrid(
-                            month = state.visibleMonth,
-                            today = today,
-                            selectedDate = state.selectedDate,
-                            dayInfo = state.dayInfo,
-                            onDayClick = viewModel::selectDate,
-                        )
-                    }
+                    SwipeableCalendar(
+                        month = state.visibleMonth,
+                        today = today,
+                        selectedDate = state.selectedDate,
+                        dayInfo = state.dayInfo,
+                        onDayClick = viewModel::selectDate,
+                        onPreviousMonth = viewModel::goToPreviousMonth,
+                        onNextMonth = viewModel::goToNextMonth,
+                    )
                     Spacer(Modifier.height(AppSpacing.md))
                     SelectedDayPanel(
                         date = state.selectedDate,
@@ -139,6 +150,75 @@ private fun MonthHeader(month: YearMonth, onPrev: () -> Unit, onNext: () -> Unit
     }
 }
 
+/** Horizontal drag distance that commits a month change. Short enough to feel light, long enough
+ * that a slightly-off vertical scroll doesn't flip the month by accident. */
+private val MONTH_SWIPE_THRESHOLD = 56.dp
+
+/**
+ * The calendar card, swipeable left/right to change month.
+ *
+ * Uses a horizontal [draggable] rather than a pager: the calendar lives inside a vertically
+ * scrolling column, and an orientation-locked drag cooperates with that scroller instead of
+ * competing with it for the same gesture. The trade-off is that the grid doesn't track the finger -
+ * so the month slides in on release, which is what makes the swipe feel like it registered.
+ */
+@Composable
+private fun SwipeableCalendar(
+    month: YearMonth,
+    today: LocalDate,
+    selectedDate: LocalDate,
+    dayInfo: Map<LocalDate, CalendarDayInfo>,
+    onDayClick: (LocalDate) -> Unit,
+    onPreviousMonth: () -> Unit,
+    onNextMonth: () -> Unit,
+) {
+    val thresholdPx = with(LocalDensity.current) { MONTH_SWIPE_THRESHOLD.toPx() }
+    // Held as the state object rather than a delegated var so the remembered drag lambda mutates
+    // the same instance across recompositions.
+    val dragTotal = remember { mutableFloatStateOf(0f) }
+
+    AppCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .draggable(
+                orientation = Orientation.Horizontal,
+                state = rememberDraggableState { delta -> dragTotal.floatValue += delta },
+                onDragStarted = { dragTotal.floatValue = 0f },
+                onDragStopped = {
+                    val travelled = dragTotal.floatValue
+                    dragTotal.floatValue = 0f
+                    when {
+                        travelled <= -thresholdPx -> onNextMonth()
+                        travelled >= thresholdPx -> onPreviousMonth()
+                    }
+                },
+            ),
+        contentPadding = PaddingValues(AppSpacing.sm),
+    ) {
+        // Weekday labels are identical every month, so they stay put while only the grid animates.
+        WeekdayHeaderRow()
+        Spacer(Modifier.height(AppSpacing.xs))
+        AnimatedContent(
+            targetState = month,
+            transitionSpec = {
+                val forward = targetState > initialState
+                val spec = tween<IntOffset>(durationMillis = 220)
+                slideInHorizontally(spec) { width -> if (forward) width else -width } togetherWith
+                    slideOutHorizontally(spec) { width -> if (forward) -width else width }
+            },
+            label = "monthGrid",
+        ) { animatedMonth ->
+            CalendarGrid(
+                month = animatedMonth,
+                today = today,
+                selectedDate = selectedDate,
+                dayInfo = dayInfo,
+                onDayClick = onDayClick,
+            )
+        }
+    }
+}
+
 @Composable
 private fun WeekdayHeaderRow() {
     Row(modifier = Modifier.fillMaxWidth()) {
@@ -164,10 +244,11 @@ private fun CalendarGrid(
 ) {
     val leadingBlanks = (month.atDay(1).dayOfWeek.value - DayOfWeek.MONDAY.value + 7) % 7
     val daysInMonth = month.lengthOfMonth()
-    val rows = (leadingBlanks + daysInMonth + 6) / 7
 
     Column {
-        for (row in 0 until rows) {
+        // Always six rows. A month needing only five would otherwise shrink the card mid-swipe and
+        // jerk the day panel below it upward, which reads as a glitch rather than a transition.
+        for (row in 0 until CALENDAR_ROWS) {
             Row(modifier = Modifier.fillMaxWidth()) {
                 for (col in 0 until 7) {
                     val dayNum = row * 7 + col - leadingBlanks + 1

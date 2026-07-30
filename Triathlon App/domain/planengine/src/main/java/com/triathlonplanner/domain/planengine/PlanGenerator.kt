@@ -65,9 +65,13 @@ object PlanGenerator {
         }
         val weeklyLoads = WeeklyLoadCurve.calculate(periodization.weeks)
 
+        val scheduleWarnings = mutableListOf<String>()
         val generatedWeeks = periodization.weeks.mapIndexed { idx, weekPlan ->
-            buildWeek(raceGoal, weekPlan, weeklyLoads[idx], firstMonday, profile)
+            buildWeek(raceGoal, weekPlan, weeklyLoads[idx], firstMonday, profile, scheduleWarnings)
         }
+        // Deduped: a day-preference conflict is a property of the preferences, so it would otherwise
+        // repeat identically for all 20-odd weeks.
+        warnings += scheduleWarnings.distinct()
 
         // Measured after generation, from actual time-in-zone across every step - the only point
         // at which the real intensity distribution is knowable.
@@ -88,9 +92,21 @@ object PlanGenerator {
         weekTotalLoad: Int,
         firstMonday: LocalDate,
         profile: UserZoneProfile,
+        scheduleWarnings: MutableList<String>,
     ): GeneratedWeek {
         val weekMonday = firstMonday.plusWeeks((weekPlan.weekIndex - 1).toLong())
-        val specs = WeeklyTemplate.sessionsFor(raceGoal.distance, weekPlan.phase, raceGoal.trainingAvailability)
+        val templateSpecs = WeeklyTemplate.sessionsFor(raceGoal.distance, weekPlan.phase, raceGoal.trainingAvailability)
+        // The template decides *what* training the week needs; the scheduler decides *when* it
+        // happens, from the athlete's day preferences. Passing weekIndex is what makes consecutive
+        // weeks differ instead of repeating one fixed layout.
+        val scheduled = SessionScheduler.schedule(
+            specs = templateSpecs,
+            preferences = raceGoal.trainingAvailability?.dayPreferences,
+            weekIndex = weekPlan.weekIndex,
+            maxTrainingDays = raceGoal.trainingAvailability?.daysPerWeekTarget,
+        )
+        scheduleWarnings += scheduled.warnings
+        val specs = scheduled.specs
 
         val rawLoads = specs.map { it.durationSec * (it.zone?.level ?: 1).toDouble() }
         val totalRawLoad = rawLoads.sum().takeIf { it > 0.0 } ?: 1.0

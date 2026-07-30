@@ -3,6 +3,7 @@ package com.triathlonplanner.feature.onboarding
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.triathlonplanner.core.model.CssSource
+import com.triathlonplanner.core.model.Discipline
 import com.triathlonplanner.core.model.Distance
 import com.triathlonplanner.core.model.FtpSource
 import com.triathlonplanner.core.model.RaceGoal
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.DayOfWeek
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -94,6 +96,22 @@ class OnboardingViewModel @Inject constructor(
     fun updateRunPbMinutes(value: String) = _uiState.update { it.copy(runPbMinutesInput = value.filter(Char::isDigit)) }
     fun updateRunPbSeconds(value: String) = _uiState.update { it.copy(runPbSecondsInput = value.filter(Char::isDigit)) }
 
+    /** Toggling a day off is how an athlete says "not this one", so both directions are supported. */
+    fun toggleTrainingDay(discipline: Discipline, day: DayOfWeek) = _uiState.update { state ->
+        when (discipline) {
+            Discipline.SWIM -> state.copy(swimDays = state.swimDays.toggled(day))
+            Discipline.BIKE -> state.copy(bikeDays = state.bikeDays.toggled(day))
+            else -> state.copy(runDays = state.runDays.toggled(day))
+        }
+    }
+
+    fun toggleLongSessionDay(day: DayOfWeek) = _uiState.update {
+        it.copy(longSessionDays = it.longSessionDays.toggled(day))
+    }
+
+    private fun Set<DayOfWeek>.toggled(day: DayOfWeek): Set<DayOfWeek> =
+        if (day in this) this - day else this + day
+
     fun skipCurrentFitness() {
         _uiState.update { it.copy(resolvedCurrentEstimateSec = null) }
         applyAvailabilityDefaults()
@@ -122,7 +140,8 @@ class OnboardingViewModel @Inject constructor(
                 applyAvailabilityDefaults()
                 OnboardingStep.TRAINING_AVAILABILITY
             }
-            OnboardingStep.TRAINING_AVAILABILITY -> {
+            OnboardingStep.TRAINING_AVAILABILITY -> OnboardingStep.TRAINING_DAYS
+            OnboardingStep.TRAINING_DAYS -> {
                 if (state.hasExistingProfile) {
                     finish()
                     return
@@ -148,7 +167,8 @@ class OnboardingViewModel @Inject constructor(
             OnboardingStep.GOAL_TYPE -> if (state.hasExistingProfile) OnboardingStep.RACE_DATE else OnboardingStep.FTP_CSS
             OnboardingStep.CURRENT_FITNESS -> OnboardingStep.GOAL_TYPE
             OnboardingStep.TRAINING_AVAILABILITY -> if (state.goalType == GoalType.JUST_FINISH) OnboardingStep.GOAL_TYPE else OnboardingStep.CURRENT_FITNESS
-            OnboardingStep.HEALTH_CONNECT -> OnboardingStep.TRAINING_AVAILABILITY
+            OnboardingStep.TRAINING_DAYS -> OnboardingStep.TRAINING_AVAILABILITY
+            OnboardingStep.HEALTH_CONNECT -> OnboardingStep.TRAINING_DAYS
             OnboardingStep.PLAN_READY -> return
         }
         _uiState.update { it.copy(step = previous) }
@@ -246,6 +266,7 @@ class OnboardingViewModel @Inject constructor(
                 val availability = TrainingAvailability(
                     weeklyHoursTarget = state.weeklyHoursInput.toDoubleOrNull() ?: recommendedFor(distance).weeklyHoursTarget,
                     daysPerWeekTarget = state.daysPerWeekInput.toIntOrNull() ?: recommendedFor(distance).daysPerWeekTarget,
+                    dayPreferences = state.dayPreferences.takeUnless { it.isEmpty },
                 )
                 val targetFinishTimeSec = if (state.goalType == GoalType.TARGET_TIME) {
                     hmsToSecondsOrNull(state.targetTimeHoursInput, state.targetTimeMinutesInput, state.targetTimeSecondsInput)

@@ -60,9 +60,12 @@ import com.triathlonplanner.core.model.Discipline
 import com.triathlonplanner.core.model.Distance
 import com.triathlonplanner.data.healthconnect.HealthConnectPermissions
 import com.triathlonplanner.data.healthconnect.healthConnectPermissionRequestContract
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
+import java.time.format.TextStyle as JavaTextStyle
+import java.util.Locale
 
 private val RUN_PB_OPTIONS = listOf(
     "5K" to 5_000.0,
@@ -80,6 +83,7 @@ private val PROGRESS_STEPS = listOf(
     OnboardingStep.GOAL_TYPE,
     OnboardingStep.CURRENT_FITNESS,
     OnboardingStep.TRAINING_AVAILABILITY,
+    OnboardingStep.TRAINING_DAYS,
     OnboardingStep.HEALTH_CONNECT,
 )
 
@@ -121,6 +125,7 @@ fun OnboardingScreen(
                     OnboardingStep.GOAL_TYPE -> GoalTypeStep(state, viewModel)
                     OnboardingStep.CURRENT_FITNESS -> CurrentFitnessStep(state, viewModel)
                     OnboardingStep.TRAINING_AVAILABILITY -> TrainingAvailabilityStep(state, viewModel)
+                    OnboardingStep.TRAINING_DAYS -> TrainingDaysStep(state, viewModel)
                     OnboardingStep.HEALTH_CONNECT -> HealthConnectStep(
                         granted = state.healthConnectPermissionsGranted,
                         onRefresh = viewModel::refreshHealthConnectStatus,
@@ -174,7 +179,7 @@ private fun BottomActions(state: OnboardingUiState, viewModel: OnboardingViewMod
     }
 
     val isFinalStep = state.step == OnboardingStep.HEALTH_CONNECT ||
-        (state.step == OnboardingStep.TRAINING_AVAILABILITY && state.hasExistingProfile)
+        (state.step == OnboardingStep.TRAINING_DAYS && state.hasExistingProfile)
 
     val canProceed = when (state.step) {
         OnboardingStep.DISTANCE -> state.canProceedFromDistance
@@ -183,7 +188,8 @@ private fun BottomActions(state: OnboardingUiState, viewModel: OnboardingViewMod
         OnboardingStep.FTP_CSS -> true
         OnboardingStep.GOAL_TYPE -> state.canProceedFromGoalType
         OnboardingStep.CURRENT_FITNESS -> state.canProceedFromCurrentFitness
-        OnboardingStep.TRAINING_AVAILABILITY -> state.canProceedFromAvailability && !state.isSaving
+        OnboardingStep.TRAINING_AVAILABILITY -> state.canProceedFromAvailability
+        OnboardingStep.TRAINING_DAYS -> state.canProceedFromTrainingDays && !state.isSaving
         OnboardingStep.HEALTH_CONNECT -> !state.isSaving
         OnboardingStep.PLAN_READY -> true
     }
@@ -540,6 +546,91 @@ private fun TrainingAvailabilityStep(state: OnboardingUiState, viewModel: Onboar
     if (state.hasExistingProfile) {
         Spacer(Modifier.height(AppSpacing.lg))
         Hint("Using the max HR, FTP and swim pace already in your profile - change them any time from the Profile tab.")
+    }
+}
+
+/**
+ * Per-discipline day availability plus long-session days. Laid out as one row of day toggles per
+ * discipline: an athlete thinks "I swim Tuesdays and Thursdays", not "Tuesday is a swim-and-run
+ * day", so the row-per-sport shape matches how the answer is actually held in their head.
+ */
+@Composable
+private fun TrainingDaysStep(state: OnboardingUiState, viewModel: OnboardingViewModel) {
+    StepHeading(
+        "Which days suit which sport?",
+        "Tap to turn days on or off. We'll rotate sessions through the days you pick, so no two " +
+            "weeks look quite the same.",
+    )
+
+    listOf(Discipline.SWIM, Discipline.BIKE, Discipline.RUN).forEach { discipline ->
+        val visual = visualFor(discipline)
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = AppSpacing.xs)) {
+            DisciplineBadge(visual.icon, visual.color, visual.label, size = 28.dp)
+            Spacer(Modifier.width(AppSpacing.sm))
+            Text(visual.label, style = MaterialTheme.typography.titleSmall)
+        }
+        DayToggleRow(
+            selected = state.daysFor(discipline),
+            accent = visual.color,
+            onToggle = { day -> viewModel.toggleTrainingDay(discipline, day) },
+        )
+        if (state.daysFor(discipline).isEmpty()) {
+            Text(
+                "Pick at least one day for ${visual.label.lowercase()}.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        Spacer(Modifier.height(AppSpacing.lg))
+    }
+
+    SectionHeader("Long session days")
+    Spacer(Modifier.height(AppSpacing.xs))
+    Hint("Days with room for your long ride or long run - usually a weekend, but yours may differ.")
+    Spacer(Modifier.height(AppSpacing.sm))
+    DayToggleRow(
+        selected = state.longSessionDays,
+        accent = MaterialTheme.colorScheme.primary,
+        onToggle = viewModel::toggleLongSessionDay,
+    )
+    if (state.longSessionDays.isEmpty()) {
+        Text(
+            "Pick at least one day that can take a long session.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+}
+
+/** Seven compact toggles, Monday first. */
+@Composable
+private fun DayToggleRow(
+    selected: Set<DayOfWeek>,
+    accent: Color,
+    onToggle: (DayOfWeek) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(AppSpacing.xs),
+    ) {
+        DayOfWeek.entries.forEach { day ->
+            val isOn = day in selected
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(42.dp)
+                    .clip(RoundedCornerShape(AppRadius.cell))
+                    .background(if (isOn) accent else MaterialTheme.colorScheme.surfaceVariant)
+                    .selectable(selected = isOn, onClick = { onToggle(day) }),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    day.getDisplayName(JavaTextStyle.NARROW, Locale.getDefault()),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (isOn) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 

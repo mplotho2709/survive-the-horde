@@ -15,6 +15,7 @@ import com.triathlonplanner.core.model.AdaptationEvent
 import com.triathlonplanner.core.model.AdaptationAction
 import com.triathlonplanner.core.model.AdaptationTriggerType
 import com.triathlonplanner.core.model.CompletedActivity
+import com.triathlonplanner.core.model.DayPreferences
 import com.triathlonplanner.core.model.CssSource
 import com.triathlonplanner.core.model.Discipline
 import com.triathlonplanner.core.model.Distance
@@ -34,6 +35,7 @@ import com.triathlonplanner.core.model.WorkoutStatus
 import com.triathlonplanner.core.model.WorkoutStepType
 import com.triathlonplanner.core.model.WorkoutType
 import java.time.Instant
+import java.time.DayOfWeek
 import java.time.LocalDate
 
 fun UserProfileEntity.toDomain(): UserZoneProfile = UserZoneProfile(
@@ -67,7 +69,20 @@ fun RaceGoalEntity.toDomain(): RaceGoal = RaceGoal(
     trainingAvailability = run {
         val hours = targetWeeklyHours
         val days = targetDaysPerWeek
-        if (hours != null && days != null) TrainingAvailability(weeklyHoursTarget = hours, daysPerWeekTarget = days) else null
+        if (hours != null && days != null) {
+            TrainingAvailability(
+                weeklyHoursTarget = hours,
+                daysPerWeekTarget = days,
+                dayPreferences = DayPreferences(
+                    swimDays = swimDaysMask.toDayOfWeekSet(),
+                    bikeDays = bikeDaysMask.toDayOfWeekSet(),
+                    runDays = runDaysMask.toDayOfWeekSet(),
+                    longSessionDays = longSessionDaysMask.toDayOfWeekSet(),
+                ).takeUnless { it.isEmpty },
+            )
+        } else {
+            null
+        }
     },
     currentFitnessEstimateSec = currentFitnessEstimateSec,
 )
@@ -82,7 +97,20 @@ fun RaceGoal.toEntity(isActive: Boolean, createdAt: Instant): RaceGoalEntity = R
     targetWeeklyHours = trainingAvailability?.weeklyHoursTarget,
     targetDaysPerWeek = trainingAvailability?.daysPerWeekTarget,
     currentFitnessEstimateSec = currentFitnessEstimateSec,
+    swimDaysMask = trainingAvailability?.dayPreferences?.swimDays?.toMask(),
+    bikeDaysMask = trainingAvailability?.dayPreferences?.bikeDays?.toMask(),
+    runDaysMask = trainingAvailability?.dayPreferences?.runDays?.toMask(),
+    longSessionDaysMask = trainingAvailability?.dayPreferences?.longSessionDays?.toMask(),
 )
+
+/* Day sets travel as 7-bit masks: bit 0 = Monday .. bit 6 = Sunday. */
+
+private fun Int?.toDayOfWeekSet(): Set<DayOfWeek> {
+    val mask = this ?: return emptySet()
+    return DayOfWeek.entries.filter { mask and (1 shl (it.value - 1)) != 0 }.toSet()
+}
+
+private fun Set<DayOfWeek>.toMask(): Int = fold(0) { acc, day -> acc or (1 shl (day.value - 1)) }
 
 fun PlannedWorkoutWithWeekIndex.toDomainSnapshot(): PlannedWorkoutSnapshot = PlannedWorkoutSnapshot(
     id = workout.id,

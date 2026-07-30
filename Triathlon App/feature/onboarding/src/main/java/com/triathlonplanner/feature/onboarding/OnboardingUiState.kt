@@ -1,6 +1,9 @@
 package com.triathlonplanner.feature.onboarding
 
+import com.triathlonplanner.core.model.DayPreferences
+import com.triathlonplanner.core.model.Discipline
 import com.triathlonplanner.core.model.Distance
+import java.time.DayOfWeek
 import java.time.LocalDate
 
 enum class OnboardingStep {
@@ -11,6 +14,7 @@ enum class OnboardingStep {
     GOAL_TYPE,
     CURRENT_FITNESS,
     TRAINING_AVAILABILITY,
+    TRAINING_DAYS,
     HEALTH_CONNECT,
     PLAN_READY,
 }
@@ -45,6 +49,12 @@ data class OnboardingUiState(
     // Derived from the run PB on the CURRENT_FITNESS step; persisted onto the profile so run
     // workouts can be prescribed in pace rather than heart rate.
     val resolvedThresholdRunPaceSecPerKm: Int? = null,
+    // Day availability per discipline, plus which days can absorb a long session. Pre-seeded with
+    // a sensible week so the step is a confirmation rather than blank work.
+    val swimDays: Set<DayOfWeek> = DayPreferences.Default.swimDays,
+    val bikeDays: Set<DayOfWeek> = DayPreferences.Default.bikeDays,
+    val runDays: Set<DayOfWeek> = DayPreferences.Default.runDays,
+    val longSessionDays: Set<DayOfWeek> = DayPreferences.Default.longSessionDays,
     val planWarnings: List<String> = emptyList(),
     val isSaving: Boolean = false,
     val isComplete: Boolean = false,
@@ -64,6 +74,25 @@ data class OnboardingUiState(
         weeklyHoursInput.toDoubleOrNull()?.let { it in 1.0..40.0 } == true &&
             daysPerWeekInput.toIntOrNull()?.let { it in 2..7 } == true
     val canProceedFromMaxHr: Boolean get() = maxHrInput.toIntOrNull()?.let { it in 100..230 } == true
+
+    val dayPreferences: DayPreferences
+        get() = DayPreferences(
+            swimDays = swimDays,
+            bikeDays = bikeDays,
+            runDays = runDays,
+            longSessionDays = longSessionDays,
+        )
+
+    fun daysFor(discipline: Discipline): Set<DayOfWeek> = when (discipline) {
+        Discipline.SWIM -> swimDays
+        Discipline.BIKE -> bikeDays
+        else -> runDays
+    }
+
+    /** Every discipline needs at least one day, and at least one day must take a long session. */
+    val canProceedFromTrainingDays: Boolean
+        get() = swimDays.isNotEmpty() && bikeDays.isNotEmpty() && runDays.isNotEmpty() &&
+            longSessionDays.isNotEmpty()
 
     val effectiveCssPaceSecPer100m: Int?
         get() {

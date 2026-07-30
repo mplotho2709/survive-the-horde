@@ -28,3 +28,12 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
         db.execSQL("ALTER TABLE user_profile ADD COLUMN thresholdRunPaceSecPerKm INTEGER DEFAULT NULL")
     }
 }
+
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE race_goal ADD COLUMN swimDaysMask INTEGER DEFAULT NULL")
+        db.execSQL("ALTER TABLE race_goal ADD COLUMN bikeDaysMask INTEGER DEFAULT NULL")
+        db.execSQL("ALTER TABLE race_goal ADD COLUMN runDaysMask INTEGER DEFAULT NULL")
+        db.execSQL("ALTER TABLE race_goal ADD COLUMN longSessionDaysMask INTEGER DEFAULT NULL")
+    }
+}

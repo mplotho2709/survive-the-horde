@@ -1,14 +1,24 @@
 package com.triathlonplanner.core.designsystem
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.triathlonplanner.core.model.Discipline
 import com.triathlonplanner.core.model.MatchStatus
@@ -34,11 +44,14 @@ data class ActualWorkoutView(
     val matchStatus: MatchStatus,
 )
 
-/** One planned workout leg - usually a whole day's session, but a brick day has two (bike + run).
- * Shared between the Today and Plan tabs so "what was planned" vs. "what you actually did"
- * (including substitutions) always renders the same way regardless of where it's shown. */
+/**
+ * One planned workout leg - usually a whole day's session, but a brick day has two (bike + run).
+ * Shared between the Today and Plan tabs so "what was planned" vs "what you actually did"
+ * (including substitutions) always renders identically wherever it appears.
+ */
 data class WorkoutLegView(
     val title: String,
+    val discipline: Discipline,
     val durationMin: Int,
     val zoneLabel: String?,
     val status: WorkoutStatus,
@@ -46,48 +59,116 @@ data class WorkoutLegView(
     val actual: ActualWorkoutView? = null,
 )
 
-/** [showHeading] repeats [WorkoutLegView.title] above the duration/zone/steps block - turn it on
- * when a caller already shows its own heading above multiple legs (e.g. a brick day) and needs
- * each leg individually labeled; leave it off when the title is shown once, above this block. */
+/** Badge, optional title, duration/zone and status - the identity line for a session. */
+@Composable
+fun WorkoutLegHeader(leg: WorkoutLegView, showTitle: Boolean, modifier: Modifier = Modifier) {
+    val visual = visualFor(leg.discipline)
+    val (statusLabel, statusTone) = statusToneFor(leg.status)
+    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        DisciplineBadge(visual.icon, visual.color, visual.label)
+        Spacer(Modifier.width(AppSpacing.md))
+        Column(Modifier.weight(1f)) {
+            if (showTitle) {
+                Text(leg.title, style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(2.dp))
+            }
+            Text(
+                buildString {
+                    append(formatDuration(leg.durationMin))
+                    leg.zoneLabel?.let { append("  ·  $it") }
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.width(AppSpacing.sm))
+        Pill(statusLabel, tone = statusTone)
+    }
+}
+
+/**
+ * Full session detail: header, step breakdown, then the completed-activity comparison.
+ *
+ * [showHeading] controls only the title inside the header - turn it on when a caller shows several
+ * legs (a brick day) and each needs naming; leave it off when the title is already printed once
+ * above this block.
+ */
 @Composable
 fun WorkoutLegDetail(leg: WorkoutLegView, showHeading: Boolean, modifier: Modifier = Modifier) {
+    val accent = visualFor(leg.discipline).color
     Column(modifier = modifier.fillMaxWidth()) {
-        if (showHeading) {
-            Text(leg.title, style = MaterialTheme.typography.titleSmall)
-            Spacer(Modifier.height(4.dp))
-        }
-        Text("${leg.durationMin} min", style = MaterialTheme.typography.bodyMedium)
-        leg.zoneLabel?.let {
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-        }
+        WorkoutLegHeader(leg, showTitle = showHeading)
+
         if (leg.steps.isNotEmpty()) {
-            Spacer(Modifier.height(8.dp))
-            leg.steps.forEach { WorkoutStepRow(it) }
+            Spacer(Modifier.height(AppSpacing.lg))
+            SectionHeader("Session")
+            Spacer(Modifier.height(AppSpacing.sm))
+            leg.steps.forEachIndexed { index, step ->
+                WorkoutStepRow(step, accent = accent)
+                if (index < leg.steps.lastIndex) Spacer(Modifier.height(AppSpacing.sm))
+            }
         }
-        Spacer(Modifier.height(12.dp))
-        Text("What you actually did", style = MaterialTheme.typography.titleSmall)
-        Spacer(Modifier.height(4.dp))
+
+        Spacer(Modifier.height(AppSpacing.lg))
+        SectionHeader("What you actually did")
+        Spacer(Modifier.height(AppSpacing.sm))
         ActualWorkoutSection(leg.status, leg.actual)
     }
 }
 
+/**
+ * One step of the session. The coloured rail gives a long interval breakdown a spine so it reads as
+ * structure rather than a wall of text; only work steps get the accent, so effort is visible at a
+ * glance.
+ */
 @Composable
-fun WorkoutStepRow(step: WorkoutStepView) {
-    Column(modifier = Modifier.padding(vertical = 4.dp)) {
-        val label = when (step.stepType) {
-            WorkoutStepType.WARMUP -> "Warmup"
-            WorkoutStepType.DRILL -> "Drill"
-            WorkoutStepType.MAIN -> "Main set"
-            WorkoutStepType.INTERVAL -> "Interval" + (step.repeatCount?.let { " (${it}x)" } ?: "")
-            WorkoutStepType.RECOVERY -> "Recovery" + (step.repeatCount?.let { " (${it}x)" } ?: "")
-            WorkoutStepType.COOLDOWN -> "Cooldown"
+fun WorkoutStepRow(
+    step: WorkoutStepView,
+    modifier: Modifier = Modifier,
+    accent: Color = MaterialTheme.colorScheme.primary,
+) {
+    val label = when (step.stepType) {
+        WorkoutStepType.WARMUP -> "Warm-up"
+        WorkoutStepType.DRILL -> "Drill"
+        WorkoutStepType.MAIN -> "Main set"
+        WorkoutStepType.INTERVAL -> "Interval"
+        WorkoutStepType.RECOVERY -> "Recovery"
+        WorkoutStepType.COOLDOWN -> "Cool-down"
+    }
+    val isWork = step.stepType == WorkoutStepType.INTERVAL || step.stepType == WorkoutStepType.MAIN
+    Row(modifier = modifier.fillMaxWidth()) {
+        Box(
+            Modifier
+                .width(3.dp)
+                .height(if (step.cueText != null) 50.dp else 32.dp)
+                .clip(RoundedCornerShape(AppRadius.pill))
+                .background(if (isWork) accent else MaterialTheme.colorScheme.outline),
+        )
+        Spacer(Modifier.width(AppSpacing.md))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(label, style = MaterialTheme.typography.titleSmall)
+                step.repeatCount?.let {
+                    Spacer(Modifier.width(AppSpacing.sm))
+                    Pill("${it}x", tone = accent)
+                }
+                Spacer(Modifier.weight(1f))
+                Text(
+                    formatDuration(step.durationMin),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            step.zoneLabel?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = accent) }
+            step.cueText?.let {
+                Spacer(Modifier.height(2.dp))
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
-        Text("$label - ${step.durationMin} min", style = MaterialTheme.typography.bodySmall)
-        step.zoneLabel?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
-        step.cueText?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
 
+/** Completed-activity summary, or a plain explanation of why there isn't one. */
 @Composable
 fun ActualWorkoutSection(plannedStatus: WorkoutStatus, actual: ActualWorkoutView?) {
     if (actual == null) {
@@ -98,20 +179,49 @@ fun ActualWorkoutSection(plannedStatus: WorkoutStatus, actual: ActualWorkoutView
                 else -> "No matching activity found."
             },
             style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         return
     }
-    if (actual.matchStatus == MatchStatus.SUBSTITUTED) {
-        Text("Substituted: ${actual.disciplineLabel}", style = MaterialTheme.typography.bodyMedium)
-    } else {
-        Text(actual.disciplineLabel, style = MaterialTheme.typography.bodyMedium)
+
+    val accents = MaterialTheme.accents
+    Column(Modifier.fillMaxWidth()) {
+        if (actual.matchStatus == MatchStatus.SUBSTITUTED) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(20.dp)
+                        .clip(CircleShape)
+                        .background(accents.warning.copy(alpha = 0.16f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(SubstitutionIcon, contentDescription = null, tint = accents.warning, modifier = Modifier.size(13.dp))
+                }
+                Spacer(Modifier.width(AppSpacing.sm))
+                Text(
+                    "You did a ${actual.disciplineLabel.lowercase()} instead",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = accents.warning,
+                )
+            }
+            Spacer(Modifier.height(AppSpacing.md))
+        }
+
+        // Built as an explicitly typed mutable list so the first entry's null unit can't pin the
+        // element type, and capped at four so the strip never crowds on a narrow screen.
+        val metrics = mutableListOf<Metric>()
+        metrics += Metric(formatDuration(actual.durationMin), null, "Time")
+        actual.distanceM?.let { meters ->
+            metrics += if (actual.discipline == Discipline.SWIM) {
+                Metric("${meters.toInt()}", "m", "Distance")
+            } else {
+                Metric("%.1f".format(meters / 1000), "km", "Distance")
+            }
+        }
+        actual.avgHr?.let { metrics += Metric("$it", "bpm", "Avg HR") }
+        actual.avgPowerW?.let { metrics += Metric("$it", "W", "Avg power") }
+        if (metrics.size < 4) metrics += Metric("${actual.calculatedLoad}", null, "Load")
+
+        MetricRow(metrics = metrics.take(4))
     }
-    Text("${actual.durationMin} min", style = MaterialTheme.typography.bodyMedium)
-    actual.distanceM?.let { meters ->
-        val distanceLabel = if (actual.discipline == Discipline.SWIM) "${meters.toInt()} m" else "%.1f km".format(meters / 1000)
-        Text(distanceLabel, style = MaterialTheme.typography.bodyMedium)
-    }
-    actual.avgHr?.let { Text("Avg HR: $it bpm", style = MaterialTheme.typography.bodyMedium) }
-    actual.avgPowerW?.let { Text("Avg power: $it W", style = MaterialTheme.typography.bodyMedium) }
-    Text("Load: ${actual.calculatedLoad}", style = MaterialTheme.typography.bodyMedium)
 }

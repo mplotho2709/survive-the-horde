@@ -23,6 +23,7 @@ import java.time.YearMonth
 data class DayLegView(
     val workoutId: Long,
     val title: String,
+    val discipline: Discipline,
     val disciplineLabel: String,
     val durationMin: Int,
     val plannedLoad: Int,
@@ -34,6 +35,7 @@ data class DayLegView(
     val detail: WorkoutLegView
         get() = WorkoutLegView(
             title = title,
+            discipline = discipline,
             durationMin = durationMin,
             zoneLabel = zoneLabel,
             status = status,
@@ -59,6 +61,9 @@ data class CalendarDayInfo(
     val phase: TrainingPhase,
     val isRecoveryWeek: Boolean,
     val hasTraining: Boolean,
+    /** Distinct disciplines that day, so a cell shows *what kind* of training it holds - a grid of
+     * identical dots tells the athlete nothing a blank cell wouldn't. */
+    val disciplines: List<Discipline> = emptyList(),
 )
 
 data class PlanUiState(
@@ -79,6 +84,7 @@ fun PlannedWorkoutSnapshot.toLegView(
     return DayLegView(
         workoutId = id,
         title = "${workoutType.name.lowercase().replaceFirstChar(Char::uppercase)} ${disciplineLabel(discipline)}",
+        discipline = discipline,
         disciplineLabel = disciplineLabel(discipline),
         durationMin = plannedDurationSec / 60,
         plannedLoad = plannedLoad,

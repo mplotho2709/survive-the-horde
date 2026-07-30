@@ -27,13 +27,16 @@ android {
 }
 
 dependencies {
-    implementation(project(":core:model"))
+    // `api`, not `implementation`: this module's public composable signatures mention core:model
+    // types (Discipline, WorkoutStatus), so consumers must see them transitively.
+    api(project(":core:model"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
-    implementation(libs.androidx.compose.material3)
+    api(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.extended)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     coreLibraryDesugaring(libs.android.desugarJdkLibs)

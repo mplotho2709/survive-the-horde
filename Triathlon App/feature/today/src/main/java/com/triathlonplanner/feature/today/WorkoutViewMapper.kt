@@ -40,6 +40,7 @@ fun PlannedWorkoutSnapshot.toWorkoutLegView(
     val zoneLabel = zoneLabelFor(ZoneResolver.resolve(discipline, zone, profile))
     return WorkoutLegView(
         title = "${workoutType.name.lowercase().replaceFirstChar(Char::uppercase)} ${disciplineLabel(discipline)}",
+        discipline = discipline,
         durationMin = plannedDurationSec / 60,
         zoneLabel = zoneLabel,
         status = status,

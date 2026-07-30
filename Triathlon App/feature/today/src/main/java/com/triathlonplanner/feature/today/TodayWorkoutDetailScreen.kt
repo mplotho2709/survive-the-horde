@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -19,44 +19,56 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.triathlonplanner.core.designsystem.AppCard
+import com.triathlonplanner.core.designsystem.AppSpacing
+import com.triathlonplanner.core.designsystem.EmptyState
 import com.triathlonplanner.core.designsystem.WorkoutLegDetail
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TodayWorkoutDetailScreen(onBack: () -> Unit, viewModel: TodayWorkoutDetailViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val detail = state.legDetail
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text("Workout Detail") },
+                title = { Text("Session", style = MaterialTheme.typography.titleMedium) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when {
-                state.isLoading -> CircularProgressIndicator(Modifier.padding(24.dp))
-                state.notFound || state.legDetail == null -> Text("Workout not found.", modifier = Modifier.padding(24.dp))
+                state.isLoading -> CircularProgressIndicator(Modifier.padding(AppSpacing.xl))
+                detail == null -> EmptyState(
+                    title = "Session not found",
+                    subtitle = "It may have been removed when your plan was last adjusted.",
+                )
                 else -> Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp)
-                        .verticalScroll(rememberScrollState()),
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = AppSpacing.gutter),
                 ) {
-                    Text(state.legDetail!!.title, style = MaterialTheme.typography.titleMedium)
-                    Spacer(Modifier.height(12.dp))
-                    WorkoutLegDetail(state.legDetail!!, showHeading = false)
+                    AppCard(Modifier.fillMaxWidth()) {
+                        Text(detail.title, style = MaterialTheme.typography.headlineSmall)
+                        Spacer(Modifier.height(AppSpacing.md))
+                        WorkoutLegDetail(detail, showHeading = false)
+                    }
+                    Spacer(Modifier.height(AppSpacing.xl))
                 }
             }
         }

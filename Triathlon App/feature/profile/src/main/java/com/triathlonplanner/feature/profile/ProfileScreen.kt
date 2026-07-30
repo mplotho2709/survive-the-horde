@@ -1,6 +1,9 @@
 package com.triathlonplanner.feature.profile
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,36 +11,48 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.triathlonplanner.core.designsystem.AppCard
+import com.triathlonplanner.core.designsystem.AppRadius
+import com.triathlonplanner.core.designsystem.AppSpacing
+import com.triathlonplanner.core.designsystem.SectionHeader
+import com.triathlonplanner.core.designsystem.accents
 import com.triathlonplanner.data.healthconnect.HealthConnectAvailability
 import com.triathlonplanner.data.healthconnect.HealthConnectPermissions
 import com.triathlonplanner.data.healthconnect.healthConnectPermissionRequestContract
 import com.triathlonplanner.domain.zones.ZoneRange
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -46,9 +61,9 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
         contract = healthConnectPermissionRequestContract(),
     ) { granted -> viewModel.onHealthConnectPermissionsResult(granted.containsAll(HealthConnectPermissions.REQUIRED)) }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Profile") }) }) { padding ->
+    Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
         if (state.isLoading) {
-            CircularProgressIndicator(Modifier.padding(padding).padding(24.dp))
+            CircularProgressIndicator(Modifier.padding(padding).padding(AppSpacing.xl))
             return@Scaffold
         }
 
@@ -56,88 +71,150 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = AppSpacing.gutter),
         ) {
-            Text("Zones", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(state.maxHrInput, viewModel::updateMaxHr, label = { Text("Max HR (bpm)") }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(state.restingHrInput, viewModel::updateRestingHr, label = { Text("Resting HR (bpm)") }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(state.ftpInput, viewModel::updateFtp, label = { Text("FTP (watts)") }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-            Row {
-                OutlinedTextField(state.cssMinutesInput, viewModel::updateCssMinutes, label = { Text("CSS min") }, modifier = Modifier.width(120.dp))
-                Spacer(Modifier.width(8.dp))
-                OutlinedTextField(state.cssSecondsInput, viewModel::updateCssSeconds, label = { Text("CSS sec") }, modifier = Modifier.width(120.dp))
-            }
-            Spacer(Modifier.height(12.dp))
-            Button(onClick = viewModel::save) { Text(if (state.isSaved) "Saved" else "Save") }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 20.dp))
-
-            Text("Don't know your FTP? Guided 20-min test", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Ride 20 minutes as hard as you can sustain, then enter your average power below.",
-                style = MaterialTheme.typography.bodySmall,
+                "Profile",
+                style = MaterialTheme.typography.displaySmall,
+                modifier = Modifier.padding(top = AppSpacing.xl, bottom = AppSpacing.md),
             )
-            Spacer(Modifier.height(8.dp))
-            Row {
-                OutlinedTextField(
-                    state.ftpTestAvgPowerInput,
-                    viewModel::updateFtpTestAvgPower,
-                    label = { Text("Avg power (W)") },
-                    modifier = Modifier.weight(1f),
+
+            AppCard(Modifier.fillMaxWidth()) {
+                SectionHeader("Your thresholds")
+                Spacer(Modifier.height(AppSpacing.md))
+                NumberField(state.maxHrInput, viewModel::updateMaxHr, "Max HR", "bpm")
+                Spacer(Modifier.height(AppSpacing.sm))
+                NumberField(state.restingHrInput, viewModel::updateRestingHr, "Resting HR", "bpm")
+                Spacer(Modifier.height(AppSpacing.sm))
+                NumberField(state.ftpInput, viewModel::updateFtp, "FTP", "W")
+                Spacer(Modifier.height(AppSpacing.md))
+                Text(
+                    "Critical Swim Speed per 100m",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.width(8.dp))
-                OutlinedButton(onClick = viewModel::applyFtpTestResult) { Text("Apply") }
+                Spacer(Modifier.height(AppSpacing.xs))
+                Row {
+                    NumberField(state.cssMinutesInput, viewModel::updateCssMinutes, "min", null, Modifier.weight(1f))
+                    Spacer(Modifier.width(AppSpacing.sm))
+                    NumberField(state.cssSecondsInput, viewModel::updateCssSeconds, "sec", null, Modifier.weight(1f))
+                }
+                Spacer(Modifier.height(AppSpacing.lg))
+                Button(
+                    onClick = viewModel::save,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(AppRadius.cell),
+                ) {
+                    if (state.isSaved) {
+                        Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(AppSpacing.sm))
+                    }
+                    Text(if (state.isSaved) "Saved" else "Save", style = MaterialTheme.typography.labelLarge)
+                }
             }
 
-            Spacer(Modifier.height(16.dp))
-            Text("Don't know your CSS? Guided time trial", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "Swim 400m all-out, rest, then swim 200m all-out. Enter both times in seconds.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Spacer(Modifier.height(8.dp))
-            Row {
-                OutlinedTextField(state.cssTest400SecInput, viewModel::updateCssTest400Sec, label = { Text("400m (sec)") }, modifier = Modifier.weight(1f))
-                Spacer(Modifier.width(8.dp))
-                OutlinedTextField(state.cssTest200SecInput, viewModel::updateCssTest200Sec, label = { Text("200m (sec)") }, modifier = Modifier.weight(1f))
-                Spacer(Modifier.width(8.dp))
-                OutlinedButton(onClick = viewModel::applyCssTestResult) { Text("Apply") }
+            Spacer(Modifier.height(AppSpacing.md))
+
+            AppCard(Modifier.fillMaxWidth()) {
+                SectionHeader("Don't know your numbers?")
+                Spacer(Modifier.height(AppSpacing.md))
+
+                Text("20-minute bike test", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Ride 20 minutes as hard as you can hold, then enter your average power.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(AppSpacing.sm))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    NumberField(state.ftpTestAvgPowerInput, viewModel::updateFtpTestAvgPower, "Avg power", "W", Modifier.weight(1f))
+                    Spacer(Modifier.width(AppSpacing.sm))
+                    OutlinedButton(onClick = viewModel::applyFtpTestResult, shape = RoundedCornerShape(AppRadius.cell)) {
+                        Text("Apply")
+                    }
+                }
+
+                Spacer(Modifier.height(AppSpacing.lg))
+
+                Text("Swim time trial", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Swim 400m all out, rest fully, then 200m all out. Enter both times in seconds.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(AppSpacing.sm))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    NumberField(state.cssTest400SecInput, viewModel::updateCssTest400Sec, "400m", "s", Modifier.weight(1f))
+                    Spacer(Modifier.width(AppSpacing.sm))
+                    NumberField(state.cssTest200SecInput, viewModel::updateCssTest200Sec, "200m", "s", Modifier.weight(1f))
+                }
+                Spacer(Modifier.height(AppSpacing.sm))
+                OutlinedButton(
+                    onClick = viewModel::applyCssTestResult,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(AppRadius.cell),
+                ) { Text("Apply swim result") }
             }
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 20.dp))
+            Spacer(Modifier.height(AppSpacing.md))
 
-            Text("Health Connect", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
-            when (state.healthConnectAvailability) {
-                HealthConnectAvailability.NOT_INSTALLED -> Text("Health Connect isn't installed on this device.")
-                HealthConnectAvailability.UPDATE_REQUIRED -> Text("Health Connect needs an update.")
-                HealthConnectAvailability.AVAILABLE -> {
-                    if (state.healthConnectPermissionsGranted) {
-                        Text("Connected - your Garmin workouts will sync automatically.")
-                    } else {
-                        Button(onClick = { launcher.launch(HealthConnectPermissions.REQUIRED) }) {
-                            Text("Grant Health Connect access")
+            ZoneCard("Heart rate zones", state.hrZones, "bpm", MaterialTheme.accents.run)
+            ZoneCard("Power zones", state.powerZones, "W", MaterialTheme.accents.bike)
+            ZoneCard("Swim pace zones", state.swimZones, "/100m", MaterialTheme.accents.swim)
+
+            AppCard(Modifier.fillMaxWidth()) {
+                SectionHeader("Health Connect")
+                Spacer(Modifier.height(AppSpacing.sm))
+                when (state.healthConnectAvailability) {
+                    HealthConnectAvailability.NOT_INSTALLED -> Text(
+                        "Health Connect isn't installed on this device.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    HealthConnectAvailability.UPDATE_REQUIRED -> Text(
+                        "Health Connect needs an update before it can sync.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    HealthConnectAvailability.AVAILABLE -> if (state.healthConnectPermissionsGranted) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(8.dp).background(MaterialTheme.accents.success, CircleShape))
+                            Spacer(Modifier.width(AppSpacing.sm))
+                            Text(
+                                "Connected - your Garmin workouts sync automatically.",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
                         }
+                    } else {
+                        Button(
+                            onClick = { launcher.launch(HealthConnectPermissions.REQUIRED) },
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                            shape = RoundedCornerShape(AppRadius.cell),
+                        ) { Text("Grant access", style = MaterialTheme.typography.labelLarge) }
                     }
                 }
             }
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 20.dp))
+            Spacer(Modifier.height(AppSpacing.md))
 
-            ZoneTable("Heart Rate Zones", state.hrZones, "bpm")
-            ZoneTable("Power Zones", state.powerZones, "W")
-            ZoneTable("Swim Pace Zones", state.swimZones, "sec/100m")
+            AppCard(Modifier.fillMaxWidth()) {
+                SectionHeader("Training plan")
+                Spacer(Modifier.height(AppSpacing.sm))
+                Text(
+                    "Cancelling keeps all your history, but you'll set a new goal to get a new plan.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(AppSpacing.md))
+                OutlinedButton(
+                    onClick = { showCancelPlanDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(AppRadius.cell),
+                ) { Text("Cancel current plan", color = MaterialTheme.colorScheme.error) }
+            }
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 20.dp))
-
-            Text("Training Plan", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = { showCancelPlanDialog = true }) { Text("Cancel current plan") }
+            Spacer(Modifier.height(AppSpacing.xl))
         }
     }
 
@@ -146,11 +223,12 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
             onDismissRequest = { showCancelPlanDialog = false },
             title = { Text("Cancel your training plan?") },
             text = { Text("Your progress and workout history are kept, but you'll need to set up a new goal to get a new plan.") },
+            shape = RoundedCornerShape(AppRadius.card),
             confirmButton = {
                 TextButton(onClick = {
                     showCancelPlanDialog = false
                     viewModel.abandonPlan()
-                }) { Text("Cancel plan") }
+                }) { Text("Cancel plan", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
                 TextButton(onClick = { showCancelPlanDialog = false }) { Text("Keep plan") }
@@ -160,11 +238,77 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
 }
 
 @Composable
-private fun ZoneTable(title: String, zones: List<ZoneRange>, unit: String) {
+private fun NumberField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    suffix: String?,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        suffix = suffix?.let { unit -> { Text(unit, style = MaterialTheme.typography.labelMedium) } },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        shape = RoundedCornerShape(AppRadius.cell),
+        modifier = modifier.fillMaxWidth(),
+    )
+}
+
+/**
+ * Zone table drawn as a stack of proportional bars. Bar length encodes where each band sits relative
+ * to the widest one and the accent deepens with zone level, so the intensity ramp is visible at a
+ * glance instead of having to be reconstructed from five pairs of numbers.
+ */
+@Composable
+private fun ZoneCard(title: String, zones: List<ZoneRange>, unit: String, accent: Color) {
     if (zones.isEmpty()) return
-    Text(title, style = MaterialTheme.typography.titleSmall)
-    zones.forEach { zone ->
-        Text("Z${zone.zone.level} ${zone.label}: ${zone.lowerBound}-${zone.upperBound} $unit", style = MaterialTheme.typography.bodySmall)
+    val maxBound = zones.maxOf { maxOf(it.lowerBound, it.upperBound) }.coerceAtLeast(1)
+
+    AppCard(Modifier.fillMaxWidth()) {
+        SectionHeader(title)
+        Spacer(Modifier.height(AppSpacing.md))
+        zones.forEachIndexed { index, zone ->
+            val ramp = 0.30f + 0.70f * (index.toFloat() / (zones.size - 1).coerceAtLeast(1))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Z${zone.zone.level}",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = accent,
+                    modifier = Modifier.width(26.dp),
+                )
+                Column(Modifier.weight(1f)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(zone.label, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            "${zone.lowerBound}-${zone.upperBound} $unit",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.height(3.dp))
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .background(MaterialTheme.accents.track, RoundedCornerShape(AppRadius.pill)),
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth(
+                                    (maxOf(zone.lowerBound, zone.upperBound).toFloat() / maxBound).coerceIn(0f, 1f),
+                                )
+                                .height(4.dp)
+                                .background(accent.copy(alpha = ramp), RoundedCornerShape(AppRadius.pill)),
+                        )
+                    }
+                }
+            }
+            if (index < zones.lastIndex) Spacer(Modifier.height(AppSpacing.sm))
+        }
     }
-    Spacer(Modifier.height(12.dp))
+    Spacer(Modifier.height(AppSpacing.md))
 }

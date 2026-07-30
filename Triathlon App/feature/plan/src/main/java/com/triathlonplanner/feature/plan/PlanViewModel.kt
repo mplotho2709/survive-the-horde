@@ -64,10 +64,15 @@ class PlanViewModel @Inject constructor(
         val dayInfo = data.weeks.flatMap { week ->
             (0..6).map { offset ->
                 val date = week.startDate.plusDays(offset.toLong())
+                val dayWorkouts = workoutsByDate[date].orEmpty()
                 date to CalendarDayInfo(
                     phase = week.phase,
                     isRecoveryWeek = week.isRecoveryWeek,
-                    hasTraining = workoutsByDate[date]?.isNotEmpty() == true,
+                    hasTraining = dayWorkouts.isNotEmpty(),
+                    disciplines = dayWorkouts
+                        .sortedBy { it.sortOrderInDay }
+                        .map { it.discipline }
+                        .distinct(),
                 )
             }
         }.toMap()

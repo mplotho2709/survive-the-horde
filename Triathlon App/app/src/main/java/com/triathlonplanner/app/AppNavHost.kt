@@ -4,14 +4,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,9 +42,9 @@ import com.triathlonplanner.feature.today.TodayWorkoutDetailScreen
 private data class BottomTab(val route: Route, val label: String, val icon: ImageVector)
 
 private val bottomTabs = listOf(
-    BottomTab(Route.Today, "Today", Icons.Filled.Home),
-    BottomTab(Route.Plan, "Plan", Icons.Filled.DateRange),
-    BottomTab(Route.Progress, "Progress", Icons.Filled.Info),
+    BottomTab(Route.Today, "Today", Icons.Filled.Today),
+    BottomTab(Route.Plan, "Plan", Icons.Filled.CalendarMonth),
+    BottomTab(Route.Progress, "Progress", Icons.Filled.Insights),
     BottomTab(Route.Profile, "Profile", Icons.Filled.Person),
 )
 
@@ -61,6 +64,7 @@ private fun MainScaffold() {
     val navController = rememberNavController()
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         bottomBar = { AppBottomBar(navController) },
     ) { padding ->
         NavHost(
@@ -89,10 +93,16 @@ private fun AppBottomBar(navController: NavHostController) {
     val currentEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentEntry?.destination?.route
 
-    NavigationBar {
+    // Surface-coloured rather than the tinted Material default, so the bar reads as a quiet frame
+    // around the content instead of a second coloured band competing with each screen's header.
+    NavigationBar(
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = NavigationBarDefaults.Elevation,
+    ) {
         bottomTabs.forEach { tab ->
+            val selected = currentRoute == tab.route.route
             NavigationBarItem(
-                selected = currentRoute == tab.route.route,
+                selected = selected,
                 onClick = {
                     navController.navigate(tab.route.route) {
                         popUpTo(navController.graph.findStartDestination().id) { saveState = true }
@@ -101,7 +111,14 @@ private fun AppBottomBar(navController: NavHostController) {
                     }
                 },
                 icon = { Icon(tab.icon, contentDescription = tab.label) },
-                label = { Text(tab.label) },
+                label = { Text(tab.label, style = MaterialTheme.typography.labelMedium) },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
             )
         }
     }

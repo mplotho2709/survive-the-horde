@@ -63,10 +63,20 @@ data class CalendarDayInfo(
     val phase: TrainingPhase,
     val isRecoveryWeek: Boolean,
     val hasTraining: Boolean,
-    /** Distinct disciplines that day, so a cell shows *what kind* of training it holds - a grid of
-     * identical dots tells the athlete nothing a blank cell wouldn't. */
-    val disciplines: List<Discipline> = emptyList(),
+    /** One marker per discipline trained that day, in the order the sessions happen. */
+    val sessions: List<DaySessionMarker> = emptyList(),
 )
+
+/**
+ * A single sport on a calendar day, carrying that sport's *main effort* for the day.
+ *
+ * Two independent encodings, which is what lets one small glyph say two things: the shape names the
+ * sport, the colour names the intensity. [zoneLevel] is the session's prescribed zone rather than
+ * anything derived from its steps - warm-ups and cool-downs are Zone 1 in every session, so
+ * averaging over steps would wash every day toward the same pale colour. Null for work with no
+ * prescribed zone, such as strength.
+ */
+data class DaySessionMarker(val discipline: Discipline, val zoneLevel: Int?)
 
 data class PlanUiState(
     val hasActivePlan: Boolean = false,

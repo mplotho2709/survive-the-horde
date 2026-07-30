@@ -60,6 +60,7 @@ import com.triathlonplanner.core.designsystem.MetricRow
 import com.triathlonplanner.core.designsystem.Pill
 import com.triathlonplanner.core.designsystem.WorkoutLegDetail
 import com.triathlonplanner.core.designsystem.colorFor
+import com.triathlonplanner.core.designsystem.colorForZone
 import com.triathlonplanner.core.designsystem.formatDuration
 import com.triathlonplanner.core.designsystem.labelFor
 import com.triathlonplanner.core.designsystem.visualFor
@@ -306,19 +307,20 @@ private fun DayCell(
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
             )
-            if (info != null && info.disciplines.isNotEmpty()) {
+            if (info != null && info.sessions.isNotEmpty()) {
                 Spacer(Modifier.height(1.dp))
-                // Sport is shown as a *symbol* rather than a colour: a bike icon says "bike"
-                // outright, where a coloured dot needs a legend the calendar has no room for.
-                // Drawn in ink rather than the discipline hue for the same reason - the shape is
-                // doing the work. Capped at three, which is more sessions than any day holds.
+                // Two encodings in one glyph: the shape names the sport, the colour names the day's
+                // main effort using the same zone ramp as the rest of the app. That's why the sport
+                // isn't colour-coded here - the colour channel is spent on intensity, which is what
+                // you actually scan a training month for. Capped at three; no day holds more.
                 Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
-                    info.disciplines.take(3).forEach { discipline ->
-                        val visual = visualFor(discipline)
+                    info.sessions.take(3).forEach { session ->
+                        val visual = visualFor(session.discipline)
                         Icon(
                             visual.icon,
                             contentDescription = visual.label,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = session.zoneLevel?.let { colorForZone(it) }
+                                ?: MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(11.dp),
                         )
                     }

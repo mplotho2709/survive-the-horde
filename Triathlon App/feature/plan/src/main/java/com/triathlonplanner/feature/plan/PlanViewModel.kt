@@ -69,10 +69,14 @@ class PlanViewModel @Inject constructor(
                     phase = week.phase,
                     isRecoveryWeek = week.isRecoveryWeek,
                     hasTraining = dayWorkouts.isNotEmpty(),
-                    disciplines = dayWorkouts
+                    // One marker per sport, carrying that sport's hardest effort of the day -
+                    // if a day holds an easy and a hard swim, the cell should show the hard one.
+                    sessions = dayWorkouts
                         .sortedBy { it.sortOrderInDay }
-                        .map { it.discipline }
-                        .distinct(),
+                        .groupBy { it.discipline }
+                        .map { (discipline, workouts) ->
+                            DaySessionMarker(discipline, workouts.mapNotNull { it.zone?.level }.maxOrNull())
+                        },
                 )
             }
         }.toMap()

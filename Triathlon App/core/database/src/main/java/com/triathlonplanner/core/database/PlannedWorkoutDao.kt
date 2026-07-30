@@ -50,6 +50,10 @@ interface PlannedWorkoutDao {
     @Query("UPDATE planned_workout SET status = :status, substitutedDiscipline = :substitutedDiscipline WHERE id = :id")
     suspend fun updateStatusWithSubstitution(id: Long, status: String, substitutedDiscipline: String)
 
+    /** Volume-only retune from SessionRebalancer - deliberately cannot touch workoutType or zone. */
+    @Query("UPDATE planned_workout SET plannedDurationSec = :durationSec, plannedLoad = :load WHERE id = :id")
+    suspend fun updateDurationAndLoad(id: Long, durationSec: Int, load: Int)
+
     @Query("UPDATE planned_workout SET workoutType = :workoutType, zoneLevel = :zoneLevel WHERE id = :id")
     suspend fun updateWorkoutTypeAndZone(id: Long, workoutType: String, zoneLevel: Int?)
 

@@ -21,6 +21,17 @@ sealed class PlanMutation {
     data class RequestReEntryBlock(val fromDate: java.time.LocalDate) : PlanMutation()
     data class SoftenCutback(val weekIndex: Int, val newPlannedLoad: Int) : PlanMutation()
     data class ExtendBuildBlock(val afterWeekIndex: Int) : PlanMutation()
+
+    /**
+     * Retunes one upcoming session's volume so the block still lands near its intended stress after
+     * a missed, easy, hard or swapped workout. Duration and load move together; the zone is
+     * deliberately absent, because this must never change how *hard* a session is.
+     */
+    data class AdjustSessionLoad(
+        val workoutId: Long,
+        val newDurationSec: Int,
+        val newPlannedLoad: Int,
+    ) : PlanMutation()
 }
 
 data class AdaptationResult(

@@ -11,6 +11,8 @@ import com.triathlonplanner.core.database.WorkoutStepDao
 import com.triathlonplanner.core.database.WorkoutStepEntity
 import com.triathlonplanner.core.model.ActivePlanSummary
 import com.triathlonplanner.core.model.CompletedActivity
+import com.triathlonplanner.core.model.Discipline
+import com.triathlonplanner.core.model.IntensityZone
 import com.triathlonplanner.core.model.GeneratedWorkoutStep
 import com.triathlonplanner.core.model.PlanCreationResult
 import com.triathlonplanner.core.model.PlanMutation
@@ -18,7 +20,9 @@ import com.triathlonplanner.core.model.PlanWeekSummary
 import com.triathlonplanner.core.model.PlannedWorkoutSnapshot
 import com.triathlonplanner.core.model.RaceGoal
 import com.triathlonplanner.core.model.UserZoneProfile
+import com.triathlonplanner.core.model.WorkoutType
 import com.triathlonplanner.domain.planengine.PlanGenerator
+import com.triathlonplanner.domain.planengine.WorkoutStepBuilder
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -36,6 +40,7 @@ class PlanRepository @Inject constructor(
     private val workoutStepDao: WorkoutStepDao,
     private val completedActivityDao: CompletedActivityDao,
     private val raceGoalRepository: RaceGoalRepository,
+    private val profileRepository: ProfileRepository,
 ) {
     fun observeActivePlan(): Flow<ActivePlanSummary?> = trainingPlanDao.observeActive().map { it?.toDomain() }
 
@@ -160,6 +165,37 @@ class PlanRepository @Inject constructor(
                 if (targetWeek != null) {
                     planWeekDao.updatePlannedLoad(plan.id, targetWeek.weekIndex, (targetWeek.plannedWeeklyLoad * 0.5).roundToInt())
                 }
+            }
+
+            // Retuned volume means the stored step breakdown no longer sums to the session, so the
+            // steps are rebuilt from the same builder that created them. Type and zone are passed
+            // through unchanged, so a rebuild can never alter how hard the session is.
+            is PlanMutation.AdjustSessionLoad -> {
+                val workout = plannedWorkoutDao.getById(mutation.workoutId) ?: return
+                plannedWorkoutDao.updateDurationAndLoad(mutation.workoutId, mutation.newDurationSec, mutation.newPlannedLoad)
+                workoutStepDao.deleteForWorkout(mutation.workoutId)
+                val profile = profileRepository.getProfileOnce()
+                val steps = WorkoutStepBuilder.build(
+                    durationSec = mutation.newDurationSec,
+                    zone = workout.zoneLevel?.let { IntensityZone(it) },
+                    workoutType = WorkoutType.valueOf(workout.workoutType),
+                    discipline = Discipline.valueOf(workout.discipline),
+                    profile = profile,
+                )
+                workoutStepDao.insertAll(
+                    steps.map { step ->
+                        WorkoutStepEntity(
+                            plannedWorkoutId = mutation.workoutId,
+                            stepOrder = step.stepOrder,
+                            stepType = step.stepType.name,
+                            durationSec = step.durationSec,
+                            distanceM = step.distanceM,
+                            intensityZoneLevel = step.intensityZone?.level,
+                            repeatCount = step.repeatCount,
+                            cueText = step.cueText,
+                        )
+                    },
+                )
             }
 
             is PlanMutation.ExtendBuildBlock -> Unit

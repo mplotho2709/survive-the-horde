@@ -12,11 +12,16 @@ import com.triathlonplanner.core.model.AdaptationTriggerType
 import com.triathlonplanner.core.model.CompletedActivity
 import com.triathlonplanner.core.model.Discipline
 import com.triathlonplanner.core.model.MatchStatus
+import com.triathlonplanner.core.model.PlannedWorkoutSnapshot
+import com.triathlonplanner.core.model.TrainingPhase
+import com.triathlonplanner.core.model.WorkoutStatus
 import com.triathlonplanner.core.model.RollingLoadState
 import com.triathlonplanner.core.model.UserZoneProfile
 import com.triathlonplanner.data.healthconnect.CompletedActivitySink
 import com.triathlonplanner.data.healthconnect.HealthConnectDataSource
 import com.triathlonplanner.domain.planengine.AdaptationEngine
+import com.triathlonplanner.domain.planengine.SessionOutcome
+import com.triathlonplanner.domain.planengine.SessionRebalancer
 import com.triathlonplanner.domain.planengine.LoadCalculator
 import com.triathlonplanner.domain.planengine.SessionMatcher
 import com.triathlonplanner.domain.planengine.WeekLoadSummary
@@ -142,11 +147,60 @@ class ActivitySyncRepository @Inject constructor(
 
         val result = AdaptationEngine.evaluate(today, now, snapshots, recentActivities, recentWeeks, rollingState)
 
-        result.mutations.forEach { planRepository.applyMutation(it) }
-        if (result.events.isNotEmpty()) {
-            adaptationEventDao.insertAll(result.events.map { it.toEntity() })
+        // Local rebalancing runs alongside the structural rules above: those decide whether a
+        // session should be dropped or downgraded, this retunes the volume of what remains so a
+        // disrupted week still lands near its intended stress.
+        val rebalance = SessionRebalancer.rebalance(
+            today = today,
+            now = now,
+            outcomes = recentOutcomes(today, snapshots, recentActivities),
+            upcoming = snapshots,
+            // Cutback, taper and race weeks exist to reduce load; topping them up would defeat them.
+            protectedWeekIndices = weeks
+                .filter { it.isRecoveryWeek || it.phase == TrainingPhase.TAPER.name || it.phase == TrainingPhase.RACE_WEEK.name }
+                .map { it.weekIndex }
+                .toSet(),
+        )
+
+        (result.mutations + rebalance.mutations).forEach { planRepository.applyMutation(it) }
+        val allEvents = result.events + rebalance.events
+        if (allEvents.isNotEmpty()) {
+            adaptationEventDao.insertAll(allEvents.map { it.toEntity() })
         }
         rollingLoadStateDao.upsert(result.updatedRollingLoadState.toEntity(planId))
+    }
+
+    /**
+     * Recent sessions paired with what actually happened to them: the load recorded against each,
+     * or null when nothing was. A matched activity of a different sport marks the swap, which is
+     * what lets the rebalancer transfer volume between disciplines rather than just totals.
+     */
+    private fun recentOutcomes(
+        today: LocalDate,
+        snapshots: List<PlannedWorkoutSnapshot>,
+        activities: List<CompletedActivity>,
+    ): List<SessionOutcome> {
+        val byWorkoutId = activities.filter { it.matchedPlannedWorkoutId != null }
+            .groupBy { it.matchedPlannedWorkoutId }
+        val windowStart = today.minusDays(SessionRebalancer.VICINITY_DAYS)
+
+        return snapshots
+            .filter { it.date in windowStart..today }
+            .filter { it.discipline != Discipline.REST }
+            .mapNotNull { workout ->
+                val matched = byWorkoutId[workout.id].orEmpty()
+                when {
+                    matched.isNotEmpty() -> SessionOutcome(
+                        workout = workout,
+                        completedLoad = matched.sumOf { it.calculatedLoad },
+                        actualDiscipline = matched.first().discipline.takeIf { it != workout.discipline },
+                    )
+                    // Only count a no-show once it has actually been marked missed, so today's
+                    // not-yet-done session isn't treated as a shortfall.
+                    workout.status == WorkoutStatus.MISSED -> SessionOutcome(workout, completedLoad = null)
+                    else -> null
+                }
+            }
     }
 
     private companion object {

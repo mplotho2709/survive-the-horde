@@ -1,15 +1,18 @@
 package com.triathlonplanner.feature.plan
 
 import com.triathlonplanner.core.designsystem.ActualWorkoutView
+import com.triathlonplanner.core.designsystem.RacePaceTargetView
 import com.triathlonplanner.core.designsystem.WorkoutLegView
 import com.triathlonplanner.core.designsystem.WorkoutStepView
 import com.triathlonplanner.core.model.CompletedActivity
 import com.triathlonplanner.core.model.Discipline
 import com.triathlonplanner.core.model.GeneratedWorkoutStep
 import com.triathlonplanner.core.model.PlannedWorkoutSnapshot
+import com.triathlonplanner.core.model.RaceGoal
 import com.triathlonplanner.core.model.TrainingPhase
 import com.triathlonplanner.core.model.UserZoneProfile
 import com.triathlonplanner.core.model.WorkoutStatus
+import com.triathlonplanner.data.repository.RacePaceResolver
 import com.triathlonplanner.data.repository.ResolvedZone
 import com.triathlonplanner.data.repository.ZoneKind
 import com.triathlonplanner.data.repository.ZoneResolver
@@ -32,6 +35,7 @@ data class DayLegView(
     val status: WorkoutStatus,
     val steps: List<WorkoutStepView> = emptyList(),
     val actual: ActualWorkoutView? = null,
+    val racePaceTarget: RacePaceTargetView? = null,
 ) {
     val detail: WorkoutLegView
         get() = WorkoutLegView(
@@ -43,6 +47,7 @@ data class DayLegView(
             status = status,
             steps = steps,
             actual = actual,
+            racePaceTarget = racePaceTarget,
         )
 }
 
@@ -89,6 +94,7 @@ data class PlanUiState(
 
 fun PlannedWorkoutSnapshot.toLegView(
     profile: UserZoneProfile?,
+    goal: RaceGoal?,
     steps: List<GeneratedWorkoutStep>,
     activity: CompletedActivity?,
 ): DayLegView {
@@ -105,6 +111,9 @@ fun PlannedWorkoutSnapshot.toLegView(
         status = status,
         steps = steps.sortedBy { it.stepOrder }.map { it.toWorkoutStepView(discipline, profile) },
         actual = activity?.toActualWorkoutView(),
+        // :data:repository can't depend on the design system, so the crossing happens here.
+        racePaceTarget = RacePaceResolver.resolve(discipline, workoutType, goal, profile)
+            ?.let { RacePaceTargetView(value = it.value, unit = it.unit, caption = it.caption) },
     )
 }
 

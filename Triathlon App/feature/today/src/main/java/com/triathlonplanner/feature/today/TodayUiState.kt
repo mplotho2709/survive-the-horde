@@ -13,6 +13,8 @@ data class TodayWorkoutView(
     val status: WorkoutStatus,
     val durationMin: Int,
     val zoneLabel: String?,
+    /** One-line race-day target for race-pace sessions, e.g. "Race target 170-190 W". */
+    val racePaceLabel: String? = null,
 )
 
 data class TodayUiState(

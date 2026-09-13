@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.triathlonplanner.data.repository.PlanRepository
 import com.triathlonplanner.data.repository.ProfileRepository
+import com.triathlonplanner.data.repository.RaceGoalRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -17,6 +18,7 @@ class TodayWorkoutDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     planRepository: PlanRepository,
     profileRepository: ProfileRepository,
+    raceGoalRepository: RaceGoalRepository,
 ) : ViewModel() {
 
     private val workoutId: Long = checkNotNull(savedStateHandle["workoutId"])
@@ -25,12 +27,13 @@ class TodayWorkoutDetailViewModel @Inject constructor(
         planRepository.observeWorkoutDetail(workoutId),
         profileRepository.observeProfile(),
         planRepository.observeStepsForWorkout(workoutId),
-    ) { (planned, activity), profile, steps ->
+        raceGoalRepository.observeActive(),
+    ) { (planned, activity), profile, steps, goal ->
         if (planned == null) {
             TodayWorkoutDetailUiState(isLoading = false, notFound = true)
         } else {
             TodayWorkoutDetailUiState(
-                legDetail = planned.toWorkoutLegView(profile, steps, activity),
+                legDetail = planned.toWorkoutLegView(profile, goal, steps, activity),
                 isLoading = false,
             )
         }

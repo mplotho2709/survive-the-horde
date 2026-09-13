@@ -153,6 +153,17 @@ private fun WorkoutRowCard(workout: TodayWorkoutView, onClick: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                // Race-pace rows get the concrete number on its own line, in the primary tone -
+                // it is the one thing the athlete needs off this card, and it should not be
+                // mistaken for the zone text above it.
+                workout.racePaceLabel?.let {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
             Spacer(Modifier.width(AppSpacing.sm))
             Pill(statusLabel, tone = statusTone)

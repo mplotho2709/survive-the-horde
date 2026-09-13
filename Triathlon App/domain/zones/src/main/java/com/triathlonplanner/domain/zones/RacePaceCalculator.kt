@@ -2,6 +2,7 @@ package com.triathlonplanner.domain.zones
 
 import com.triathlonplanner.core.model.Discipline
 import com.triathlonplanner.core.model.Distance
+import com.triathlonplanner.core.model.IntensityZone
 import com.triathlonplanner.core.model.UserZoneProfile
 import kotlin.math.roundToInt
 
@@ -11,12 +12,20 @@ data class RacePaceTarget(
     val lowerBound: Int,
     val upperBound: Int,
     val unit: RacePaceUnit,
+    val source: RacePaceSource = RacePaceSource.PHYSIOLOGY,
 ) {
     /** True when the two bounds collapsed to a single prescribed value rather than a range. */
     val isPoint: Boolean get() = lowerBound == upperBound
 }
 
 enum class RacePaceUnit { WATTS, SEC_PER_KM, SEC_PER_100M }
+
+/**
+ * Where a target came from, which is what a caller may honestly claim about it. [GOAL_TIME] means
+ * the number is what the athlete's stated finish time demands; [PHYSIOLOGY] means it is derived
+ * from their own FTP/CSS/threshold pace and says nothing about whether the goal is reachable.
+ */
+enum class RacePaceSource { GOAL_TIME, PHYSIOLOGY }
 
 /**
  * Turns a race goal into concrete, discipline-specific intensity targets - the difference between
@@ -91,11 +100,18 @@ object RacePaceCalculator {
      * Run race-pace band in sec/km. Prefers the pace implied by [targetFinishTimeSec] (a true
      * race-specific prescription); otherwise falls back to a threshold-relative band. Null when
      * neither a goal time nor a threshold pace is known.
+     *
+     * The goal-implied pace is only used while it is *demanding* - see [isRaceable]. A goal loose
+     * enough that the run is not the limiting leg produces an arithmetically correct but useless
+     * prescription (a 2:30 sprint goal leaves so much time that the required 5 km pace is slower
+     * than walking), and this band is read as a workout target, not just as race-day arithmetic.
      */
     fun runTarget(distance: Distance, profile: UserZoneProfile, targetFinishTimeSec: Int? = null): RacePaceTarget? {
-        goalPaceSecPerKm(distance, profile, targetFinishTimeSec)?.let { goalPace ->
-            return RacePaceTarget(Discipline.RUN, goalPace - 5, goalPace + 5, RacePaceUnit.SEC_PER_KM)
-        }
+        goalPaceSecPerKm(distance, profile, targetFinishTimeSec)
+            ?.takeIf { isRaceable(it, profile) }
+            ?.let { goalPace ->
+                return RacePaceTarget(Discipline.RUN, goalPace - 5, goalPace + 5, RacePaceUnit.SEC_PER_KM, RacePaceSource.GOAL_TIME)
+            }
         val threshold = profile.thresholdRunPaceSecPerKm ?: return null
         val (lowSpeed, highSpeed) = RUN_THRESHOLD_SPEED_FRACTION.getValue(distance)
         return RacePaceTarget(
@@ -103,7 +119,28 @@ object RacePaceCalculator {
             lowerBound = (threshold / highSpeed).roundToInt(),
             upperBound = (threshold / lowSpeed).roundToInt(),
             unit = RacePaceUnit.SEC_PER_KM,
+            source = RacePaceSource.PHYSIOLOGY,
         )
+    }
+
+    /**
+     * Whether a goal-implied pace is fast enough to still count as racing.
+     *
+     * The floor is the slow edge of the athlete's own easy/aerobic zone (Zone 2 in
+     * [RunPaceZoneCalculator]). Below that the run is, for this athlete, not a race effort at all -
+     * it is a jog - so prescribing it as "race pace" would make a race-pace session physiologically
+     * indistinguishable from an easy run and teach the athlete nothing about race-day pacing. Where
+     * exactly to draw this line is coaching judgment, not a cited threshold; the easy-zone edge is
+     * chosen because it is the athlete's own boundary between aerobic work and racing rather than
+     * an arbitrary constant.
+     *
+     * Returns true when threshold pace is unknown: with no basis to judge, the goal arithmetic is
+     * the only information available and suppressing it would leave the athlete with nothing.
+     */
+    private fun isRaceable(goalPaceSecPerKm: Int, profile: UserZoneProfile): Boolean {
+        val threshold = profile.thresholdRunPaceSecPerKm ?: return true
+        val easyZone = RunPaceZoneCalculator.zoneFor(threshold, IntensityZone(2))
+        return goalPaceSecPerKm < easyZone.upperBound
     }
 
     /**

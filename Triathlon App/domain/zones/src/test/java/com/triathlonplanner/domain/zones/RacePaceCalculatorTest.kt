@@ -71,6 +71,30 @@ class RacePaceCalculatorTest {
 
         assertThat(goalTarget).isNotEqualTo(genericTarget)
         assertThat(goalTarget.unit).isEqualTo(RacePaceUnit.SEC_PER_KM)
+        assertThat(goalTarget.source).isEqualTo(RacePaceSource.GOAL_TIME)
+        assertThat(genericTarget.source).isEqualTo(RacePaceSource.PHYSIOLOGY)
+    }
+
+    @Test
+    fun `a goal so relaxed the run is not the limiting leg falls back to physiology`() {
+        // 2h30 for a sprint leaves so much time after the swim and bike that the required 5 km pace
+        // is slower than walking - arithmetically correct, useless as a session target.
+        val target = RacePaceCalculator.runTarget(Distance.SPRINT, profile, targetFinishTimeSec = 150 * 60)!!
+        val easyZoneSlowEnd = RunPaceZoneCalculator
+            .zoneFor(profile.thresholdRunPaceSecPerKm!!, com.triathlonplanner.core.model.IntensityZone(2))
+            .upperBound
+
+        assertThat(target.source).isEqualTo(RacePaceSource.PHYSIOLOGY)
+        assertThat(target.upperBound).isLessThan(easyZoneSlowEnd)
+        // The raw arithmetic is still available and still honest - only the *prescription* changed.
+        assertThat(RacePaceCalculator.goalPaceSecPerKm(Distance.SPRINT, profile, 150 * 60)).isGreaterThan(easyZoneSlowEnd)
+    }
+
+    @Test
+    fun `an unreachable goal also falls back to physiology rather than yielding nothing`() {
+        val target = RacePaceCalculator.runTarget(Distance.OLYMPIC, profile, targetFinishTimeSec = 30 * 60)!!
+
+        assertThat(target.source).isEqualTo(RacePaceSource.PHYSIOLOGY)
     }
 
     @Test

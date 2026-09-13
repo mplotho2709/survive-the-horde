@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -35,6 +36,22 @@ data class WorkoutStepView(
     val cueText: String?,
 )
 
+/**
+ * The concrete number an athlete should hold on race day - "170-190 W", not "Zone 2".
+ *
+ * Pre-formatted rather than numeric because the unit differs per discipline (watts, sec/100m,
+ * sec/km) and the caption has to name where the number came from; doing that here would drag the
+ * zone/race-pace domain into the design system. [caption] states the derivation in one line, so a
+ * prescription the athlete disagrees with can be argued with rather than merely obeyed.
+ */
+data class RacePaceTargetView(
+    /** Just the number or range - "170-190", "4:32-4:42". */
+    val value: String,
+    /** Its unit - "W", "/km", "/100m". Kept separate so it can be set small beside the value. */
+    val unit: String,
+    val caption: String,
+)
+
 data class ActualWorkoutView(
     val discipline: Discipline,
     val disciplineLabel: String,
@@ -60,6 +77,8 @@ data class WorkoutLegView(
     val status: WorkoutStatus,
     val steps: List<WorkoutStepView> = emptyList(),
     val actual: ActualWorkoutView? = null,
+    /** Set only for race-pace sessions whose target could actually be computed. */
+    val racePaceTarget: RacePaceTargetView? = null,
 )
 
 /** Badge, optional title, duration/zone and status - the identity line for a session. */
@@ -115,6 +134,13 @@ fun WorkoutLegDetail(leg: WorkoutLegView, showHeading: Boolean, modifier: Modifi
     Column(modifier = modifier.fillMaxWidth()) {
         WorkoutLegHeader(leg, showTitle = showHeading)
 
+        // Above the step breakdown on purpose. On a race-pace day the number to hold *is* the
+        // session; the warm-up/main/cool-down split is secondary detail.
+        leg.racePaceTarget?.let { target ->
+            Spacer(Modifier.height(AppSpacing.lg))
+            RacePaceTargetBlock(target)
+        }
+
         if (leg.steps.isNotEmpty()) {
             Spacer(Modifier.height(AppSpacing.lg))
             SectionHeader("Session")
@@ -129,6 +155,45 @@ fun WorkoutLegDetail(leg: WorkoutLegView, showHeading: Boolean, modifier: Modifi
         SectionHeader("What you actually did")
         Spacer(Modifier.height(AppSpacing.sm))
         ActualWorkoutSection(leg.status, leg.actual)
+    }
+}
+
+/**
+ * The race-day number, given the weight it deserves.
+ *
+ * Tinted with the primary colour rather than a zone colour: this target is deliberately *not* a
+ * training zone (a long-course race is ridden well below the Zone 4 a "race pace" label implies),
+ * so borrowing the zone ramp here would re-assert exactly the equivalence the number exists to
+ * correct.
+ */
+@Composable
+fun RacePaceTargetBlock(target: RacePaceTargetView, modifier: Modifier = Modifier) {
+    val tone = MaterialTheme.colorScheme.primary
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(AppRadius.card))
+            .background(tone.copy(alpha = 0.10f))
+            .padding(AppSpacing.md),
+    ) {
+        SectionHeader("Race-day target")
+        Spacer(Modifier.height(AppSpacing.xs))
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(target.value, style = MetricValueStyle, color = tone)
+            Spacer(Modifier.width(AppSpacing.xs))
+            Text(
+                target.unit,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 3.dp),
+            )
+        }
+        Spacer(Modifier.height(2.dp))
+        Text(
+            target.caption,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

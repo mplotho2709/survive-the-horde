@@ -7,12 +7,16 @@ import com.triathlonplanner.core.model.CompletedActivity
 import com.triathlonplanner.core.model.Discipline
 import com.triathlonplanner.core.model.GeneratedWorkoutStep
 import com.triathlonplanner.core.model.PlannedWorkoutSnapshot
+import com.triathlonplanner.core.model.RaceGoal
 import com.triathlonplanner.core.model.UserZoneProfile
+import com.triathlonplanner.core.designsystem.RacePaceTargetView
+import com.triathlonplanner.data.repository.RacePacePrescription
+import com.triathlonplanner.data.repository.RacePaceResolver
 import com.triathlonplanner.data.repository.ResolvedZone
 import com.triathlonplanner.data.repository.ZoneKind
 import com.triathlonplanner.data.repository.ZoneResolver
 
-fun PlannedWorkoutSnapshot.toTodayView(profile: UserZoneProfile?): TodayWorkoutView {
+fun PlannedWorkoutSnapshot.toTodayView(profile: UserZoneProfile?, goal: RaceGoal?): TodayWorkoutView {
     val resolved = ZoneResolver.resolve(discipline, zone, profile)
     val zoneLabel = zoneLabelFor(resolved)
 
@@ -27,6 +31,9 @@ fun PlannedWorkoutSnapshot.toTodayView(profile: UserZoneProfile?): TodayWorkoutV
         status = status,
         durationMin = plannedDurationSec / 60,
         zoneLabel = zoneLabel,
+        // The compact row has no space for the derivation, but "Race target 170-190 W" beats
+        // "Zone 2" even on one line - which is the whole point of surfacing these at all.
+        racePaceLabel = RacePaceResolver.resolve(discipline, workoutType, goal, profile)?.shortLabel,
     )
 }
 
@@ -34,6 +41,7 @@ fun PlannedWorkoutSnapshot.toTodayView(profile: UserZoneProfile?): TodayWorkoutV
  * [WorkoutLegView] so a substituted session renders identically wherever it's shown. */
 fun PlannedWorkoutSnapshot.toWorkoutLegView(
     profile: UserZoneProfile?,
+    goal: RaceGoal?,
     steps: List<GeneratedWorkoutStep>,
     activity: CompletedActivity?,
 ): WorkoutLegView {
@@ -47,8 +55,12 @@ fun PlannedWorkoutSnapshot.toWorkoutLegView(
         status = status,
         steps = steps.sortedBy { it.stepOrder }.map { it.toWorkoutStepView(discipline, profile) },
         actual = activity?.toActualWorkoutView(),
+        racePaceTarget = RacePaceResolver.resolve(discipline, workoutType, goal, profile)?.toView(),
     )
 }
+
+/** :data:repository can't depend on the design system, so the crossing happens here. */
+internal fun RacePacePrescription.toView() = RacePaceTargetView(value = value, unit = unit, caption = caption)
 
 private fun GeneratedWorkoutStep.toWorkoutStepView(discipline: Discipline, profile: UserZoneProfile?): WorkoutStepView {
     val resolved = intensityZone?.let { ZoneResolver.resolve(discipline, it, profile) }

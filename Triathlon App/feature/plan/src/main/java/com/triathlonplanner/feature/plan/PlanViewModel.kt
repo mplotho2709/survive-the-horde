@@ -4,9 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.triathlonplanner.core.model.PlanWeekSummary
 import com.triathlonplanner.core.model.PlannedWorkoutSnapshot
+import com.triathlonplanner.core.model.RaceGoal
 import com.triathlonplanner.core.model.UserZoneProfile
 import com.triathlonplanner.data.repository.PlanRepository
 import com.triathlonplanner.data.repository.ProfileRepository
+import com.triathlonplanner.data.repository.RaceGoalRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -28,6 +30,8 @@ private data class CalendarData(
     val weeks: List<PlanWeekSummary>,
     val workouts: List<PlannedWorkoutSnapshot>,
     val profile: UserZoneProfile?,
+    /** Needed for race-pace targets: the sustainable fraction of FTP/CSS depends on race duration. */
+    val goal: RaceGoal?,
     val nav: LocalNav,
 )
 
@@ -36,6 +40,7 @@ private data class CalendarData(
 class PlanViewModel @Inject constructor(
     private val planRepository: PlanRepository,
     private val profileRepository: ProfileRepository,
+    private val raceGoalRepository: RaceGoalRepository,
 ) : ViewModel() {
 
     private val localNav = MutableStateFlow(LocalNav(YearMonth.now(), LocalDate.now()))
@@ -49,8 +54,9 @@ class PlanViewModel @Inject constructor(
                     planRepository.observeWeeksForPlan(plan.id),
                     planRepository.observeWorkoutsForPlan(plan.id),
                     profileRepository.observeProfile(),
+                    raceGoalRepository.observeActive(),
                     localNav,
-                ) { weeks, workouts, profile, nav -> CalendarData(weeks, workouts, profile, nav) }
+                ) { weeks, workouts, profile, goal, nav -> CalendarData(weeks, workouts, profile, goal, nav) }
                     .flatMapLatest { data -> buildUiState(data) }
             }
         }
@@ -98,7 +104,7 @@ class PlanViewModel @Inject constructor(
             combine(
                 planRepository.observeStepsForWorkout(workout.id),
                 planRepository.observeWorkoutDetail(workout.id),
-            ) { steps, (_, activity) -> workout.toLegView(data.profile, steps, activity) }
+            ) { steps, (_, activity) -> workout.toLegView(data.profile, data.goal, steps, activity) }
         }
         return combine(legFlows) { legs -> baseState.copy(selectedDay = legs.toList().toDayPlanView(data.nav.selectedDate)) }
     }
